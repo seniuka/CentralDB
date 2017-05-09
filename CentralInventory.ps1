@@ -900,6 +900,58 @@ catch
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
+################################################## Database Backups #################################################################
+try 
+{
+$ErrorActionPreference = "Stop"; #Make all errors terminating
+$CITbl = “[DB].[DatabaseBackups]”
+$query= "SELECT   
+	bs.machine_name as ServerName,
+	bs.server_name as InstanceName,  
+	bs.database_name as DBName, 
+	bs.backup_set_uuid as BackupSetGUID,
+	bs.type as BackupTypeCode, 
+	CASE bs.type
+		WHEN 'D' THEN 'Full Database'
+		WHEN 'I' THEN 'Differential Database'
+		WHEN 'L' THEN 'Log'
+		WHEN 'F' THEN 'File/Filegroup'
+		WHEN 'G' THEN 'Differential file'
+		WHEN 'P' THEN 'Partial'
+		WHEN 'Q' THEN 'Partial Differential'
+		ELSE 'Unknown'
+	END as BackupTypeDesciption,
+	bs.backup_start_date,  
+	bs.backup_finish_date, 
+	datediff(ms, bs.backup_start_date, bs.backup_finish_date) backup_duration_ms,
+	bs.expiration_date, 
+	bs.backup_size, 
+	bs.compressed_backup_size,  
+	bmf.physical_device_name,   
+	bs.description, 
+	bs.recovery_model,
+	bs.is_copy_only,
+	bs.is_password_protected,
+	bs.has_backup_checksums  
+FROM   msdb.dbo.backupmediafamily   bmf
+INNER JOIN msdb.dbo.backupset bs ON bmf.media_set_id = bs.media_set_id  
+where isnull(bs.name, '0') != '1';"
+$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+$dt = new-object System.Data.DataTable
+$da.fill($dt) | out-null
+#$cn.Close()
+Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
+$query = "set nocount on; update msdb.dbo.backupset set [name] = '1' where isnull([name], '0') != '1';" 
+#Set the Name field to a value to capture that we have collected this information already
+$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+}
+catch 
+{ 
+        $ex = $_.Exception 
+        write-log -Message "$ex.Message on $svr While Collecting Database Backup Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+}finally{
+   $ErrorActionPreference = "Continue"; #Reset the error action pref to default
+}
 ################################################## Database Files #################################################################
 try 
 {
