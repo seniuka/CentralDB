@@ -310,6 +310,45 @@ CREATE CLUSTERED INDEX [CI_DatabaseFiles] ON [DB].[DatabaseFiles]
 	[DBFlID] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 85) ON [PRIMARY]
 GO
+
+/****** Object:  Table [DB].[DatabaseBackups]    Script Date: 5/9/2017 10:49:19 AM ******/
+SET ANSI_NULLS ON
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [DB].[DatabaseBackups](
+	[ServerName] [nvarchar](128) NOT NULL,
+	[InstanceName] [nvarchar](128) NOT NULL,
+	[DBName] [nvarchar](128) NULL,
+	[BackupSetGUID] [uniqueidentifier] NULL,
+	[BackupTypeCode] [nvarchar](3) NULL,
+	[BackupTypeDesciption] [nvarchar](256) NULL,
+	[BackupStartDate] [datetime] NULL,
+	[BackupFinishDate] [datetime] NULL,
+	[BackupDurationMS] [int] NULL,
+	[ExpirationDate] [smalldatetime] NULL,
+	[BackupSize] [decimal](18, 2) NULL,
+	[CompressedBackupSize] [decimal](18, 2) NULL,
+	[PhysicalDeviceName] [nvarchar](500) NULL,
+	[Description] [nvarchar](256) NULL,
+	[RecoveryModel] [nvarchar](60) NULL,
+	[IsCopyOnly] [tinyint] NULL,
+	[IsPasswordProtected] [tinyint] NULL,
+	[HasbackupChecksums] [tinyint] NULL,
+	[DateAdded] [smalldatetime] NULL,
+	[DBID] [int] IDENTITY(1,1) NOT NULL
+) ON [PRIMARY]
+GO
+
+/****** Object:  Index [CI_DatabaseInfo]    Script Date: 5/9/2017 9:03:30 AM ******/
+CREATE CLUSTERED INDEX [CI_DatabaseBackups] ON [DB].[DatabaseBackups]
+(
+	[InstanceName] ASC,
+	[DBName] ASC,
+	[DateAdded] ASC,
+	[DBID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 95) ON [PRIMARY]
+GO
+
 /****** Object:  Table [DB].[DatabaseInfo]    Script Date: 12/8/2014 9:37:14 PM ******/
 SET ANSI_NULLS ON
 GO
