@@ -110,6 +110,28 @@ function Get-Type
         Write-Output 'System.String'      
     } 
 } #Get-Type 
+function GetVersion ($Version)
+{ 
+    $SQLVersion = 'Unknown'
+    if($Version -Like '8.*')    { $SQLVersion = 'SQL Server 2000' } 
+    if($Version -Like '9.*')  { $SQLVersion = 'SQL Server 2005'} 
+    if($Version -Like '10.5*'){ $SQLVersion = 'SQL Server 2008 R2' } 
+    if($Version -Like '10.0*'){ $SQLVersion = 'SQL Server 2008' } 
+    if($Version -Like '11.0*'){ $SQLVersion = 'SQL Server 2012'} 
+    if($Version -Like '12.0*'){ $SQLVersion = 'SQL Server 2014'} 
+    if($Version -Like '13.0*'){ $SQLVersion = 'SQL Server 2016'} 
+    return $SQLVersion
+} #GetVersion
+function GetIsUpToDate ($Version)
+{ 
+    $IsUpToDate = 'False'
+    if ($Version -Like '10.0.6*')  {$IsUpToDate = 'True'}
+    if ($Version -Like '10.50.6*') {$IsUpToDate = 'True'}
+    if ($Version -Like '11.0.6*')  {$IsUpToDate = 'True'}
+    if ($Version -Like '12.0.5*')  {$IsUpToDate = 'True'}
+    if ($Version -Like '13.0.4*')  {$IsUpToDate = 'True'}
+    return $IsUpToDate;
+} #GetIsUpToDate
 <# 
 .SYNOPSIS 
 Creates a DataTable for an object 
@@ -522,13 +544,18 @@ $name = $inst.Split("\")
 if ($name.Length -eq 1) { $instname = "MSSQLSERVER" } else { $instname = $name[1]}
 $port = getTcpPort $svr $instname
 $ip = (Test-Connection $svr -count 1).IPV4Address.ToString()
-if($s.Version -Like '8.*'){ $SQLVersion = 'SQL Server 2000' } elseif($s.Version -Like '9.*'){ $SQLVersion = 'SQL Server 2005'} elseif($s.Version -Like '10.5*'){ $SQLVersion = 'SQL Server 2008 R2' } 
-elseif($s.Version -Like '10.*'){ $SQLVersion = 'SQL Server 2008' } elseif($s.Version -Like '11.0*'){ $SQLVersion = 'SQL Server 2012'} 
-elseif($s.Version -Like '12.0*'){ $SQLVersion = 'SQL Server 2014'} else { $SQLVersion ='Unknown'}
 
-if(($s.Version -Like '8.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDate = 'True'} elseif(($s.Version -Like '9.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDate = 'True'} elseif(($s.Version -Like '10.5*') -and ($s.ProductLevel -eq 'SP3')){ $IsSPUpToDate = 'True' } 
-elseif(($s.Version -Like '10.*') -and ($s.ProductLevel -eq 'SP4')){  $IsSPUpToDate = 'True' } elseif(($s.Version -Like '11.0*') -and ($s.ProductLevel -eq 'SP2')){ $IsSPUpToDate = 'True'} 
-elseif(($s.Version -Like '12.0*') -and ($s.ProductLevel -eq 'RTM')){ $IsSPUpToDate = 'True'} else { $IsSPUpToDate = 'False'}
+$SQLVersion = GetVersion($s.Version)
+
+#if($s.Version -Like '8.*'){ $SQLVersion = 'SQL Server 2000' } elseif($s.Version -Like '9.*'){ $SQLVersion = 'SQL Server 2005'} elseif($s.Version -Like '10.5*'){ $SQLVersion = 'SQL Server 2008 R2' } 
+#elseif($s.Version -Like '10.*'){ $SQLVersion = 'SQL Server 2008' } elseif($s.Version -Like '11.0*'){ $SQLVersion = 'SQL Server 2012'} 
+#elseif($s.Version -Like '12.0*'){ $SQLVersion = 'SQL Server 2014'} else { $SQLVersion ='Unknown'}
+
+$IsSPUpToDate = GetIsUpToDate($s.Version)
+
+#if(($s.Version -Like '8.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDate = 'True'} elseif(($s.Version -Like '9.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDate = 'True'} elseif(($s.Version -Like '10.5*') -and ($s.ProductLevel -eq 'SP3')){ $IsSPUpToDate = 'True' } 
+#elseif(($s.Version -Like '10.*') -and ($s.ProductLevel -eq 'SP4')){  $IsSPUpToDate = 'True' } elseif(($s.Version -Like '11.0*') -and ($s.ProductLevel -eq 'SP2')){ $IsSPUpToDate = 'True'} 
+#elseif(($s.Version -Like '12.0*') -and ($s.ProductLevel -eq 'RTM')){ $IsSPUpToDate = 'True'} else { $IsSPUpToDate = 'False'}
 
 if($s.edition -Like'*Developer*'){ $SQLEdition = 'Developer Edition'} elseif($s.edition -Like'*Enterprise*'){ $SQLEdition = 'Enterprise Edition'} 
 elseif($s.edition -Like'*Standard*'){ $SQLEdition = 'Standard Edition'} elseif($s.edition -Like'*Express*'){ $SQLEdition = 'Express Edition'} 
