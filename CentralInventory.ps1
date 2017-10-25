@@ -5,8 +5,10 @@ http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
 http://www.sqlservercentral.com/articles/baselines/94657/ #>
 ###################################################################################################################################
 param(
-	[string]$SQLInst="localhost",
-	[string]$Centraldb="CentralDB"
+	[string]$SQLInst="",
+	[string]$Centraldb="CentralDB",
+    	[string]$runLocally="false",
+	[string]$errorPath 	#"\\Path\CentralInventory_" + $env:computername + ".log"
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -54,8 +56,11 @@ function Write-DataTable
     [Parameter(Position=5, Mandatory=$false)] [string]$Password, 
     [Parameter(Position=6, Mandatory=$false)] [Int32]$BatchSize=50000, 
     [Parameter(Position=7, Mandatory=$false)] [Int32]$QueryTimeout=0, 
-    [Parameter(Position=8, Mandatory=$false)] [Int32]$ConnectionTimeout=15 
+    [Parameter(Position=8, Mandatory=$false)] [Int32]$ConnectionTimeout=30 
     ) 
+	
+	#write-output $ServerInstance
+	#write-output $Data
      $conn=new-object System.Data.SqlClient.SQLConnection  
     if ($Username) 
     { $ConnectionString = "Server={0};Database={1};User ID={2};Password={3};Trusted_Connection=False;Connect Timeout={4}" -f $ServerInstance,$Database,$Username,$Password,$ConnectionTimeout } 
@@ -74,13 +79,15 @@ function Write-DataTable
     } 
     Catch [System.Management.Automation.MethodInvocationException]
     {
+		#write-output $ServerInstance
+	write-output $Data
 	$ex = $_.Exception 
-	write-log -Message "$ex.Message on $svr" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+	write-log -Message "$ex.Message on $svr" -Level Error -NoConsoleOut -Path $errorPath
     }
     catch 
     { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr"  -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr"  -Level Error -NoConsoleOut -Path $errorPath
     } 
 } #Write-DataTable
 ###########################################################################################################################
@@ -110,10 +117,11 @@ function Get-Type
         Write-Output 'System.String'      
     } 
 } #Get-Type 
+###########################################################################################################################
 function GetVersion ($Version)
 { 
     $SQLVersion = 'Unknown'
-    if($Version -Like '8.*')    { $SQLVersion = 'SQL Server 2000' } 
+    if($Version -Like '8.*')  { $SQLVersion = 'SQL Server 2000' } 
     if($Version -Like '9.*')  { $SQLVersion = 'SQL Server 2005'} 
     if($Version -Like '10.5*'){ $SQLVersion = 'SQL Server 2008 R2' } 
     if($Version -Like '10.0*'){ $SQLVersion = 'SQL Server 2008' } 
@@ -296,9 +304,9 @@ function Write-Log {
                     .PARAMETER EventID
                             The ID to appear as the event ID attribute for the system event log entry. This is ignored unless 'EventLogName' is specified.     
                     .EXAMPLE
-                            PS C:\> Write-Log -Message "It's all good!" -Path C:\MyLog.log -Clobber -EventLogName 'Application'     
+                            PS H:\Temp\> Write-Log -Message "It's all good!" -Path H:\Temp\MyLog.log -Clobber -EventLogName 'Application'     
                     .EXAMPLE
-                            PS C:\> Write-Log -Message "Oops, not so good!" -Level Error -EventID 3 -Indent 2 -EventLogName 'Application' -EventSource "My Script"     
+                            PS H:\Temp\> Write-Log -Message "Oops, not so good!" -Level Error -EventID 3 -Indent 2 -EventLogName 'Application' -EventSource "My Script"     
                     .INPUTS
                             System.String     
                     .OUTPUTS
@@ -361,18 +369,33 @@ function getTcpPort([String] $pHostName, [String] $pInstanceName)
 	if ($strTcpPort) {
 		return $strTcpPort
 	}	
+    #SQL Server 2014
+	$strKeyPath = "SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL12.$pInstanceName\MSSQLServer\SuperSocketNetLib\Tcp\IPAll"
+	$strTcpPort=$reg.GetStringValue($HKEY_LOCAL_MACHINE,$strKeyPath,"TcpPort").svalue
+	if ($strTcpPort) {
+		return $strTcpPort
+	}	
+    #SQL Server 2014
+	$strKeyPath = "SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL13.$pInstanceName\MSSQLServer\SuperSocketNetLib\Tcp\IPAll"
+	$strTcpPort=$reg.GetStringValue($HKEY_LOCAL_MACHINE,$strKeyPath,"TcpPort").svalue
+	if ($strTcpPort) {
+		return $strTcpPort
+	}	
 	return ""
 }
 #http://poshtips.com/measuring-elapsed-time-in-powershell/
 $ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
-write-log -Message "Script Started at $(get-date)" -NoConsoleOut -Clobber -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+write-log -Message "Script Started at $(get-date)" -NoConsoleOut -Clobber -Path $errorPath
 ######################################################################################################################################
 #Fucntion to get Server list info
 try 
 { 
 function GetServerListInfo($svr, $inst) {
 # Create an ADO.Net connection to the instance
+
+#"Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master"
 $cn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master");
+#$cn = new-object system.data.SqlClient.SqlConnection("server=$SQLInst;database=$CentralDB;Integrated Security=true;");
 $s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $cn
 $RunDt = Get-Date -format G
 
@@ -407,7 +430,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting Operating System Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr while collecting Operating System Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -425,7 +448,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting Page File Usage Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr while collecting Page File Usage Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -452,8 +475,9 @@ $processors = get-wmiobject -computername $svr win32_processor
 $CurrentCPUSpeed = ($Processors | Measure-Object CurrentClockSpeed -max).Maximum
 $MaxCPUSpeed  =  ($Processors | Measure-Object MaxClockSpeed -max).Maximum
 $z = Get-WmiObject -Class Win32_SystemServices -ComputerName $svr
+$ip = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $svr | Where {$_.IPAddress } | SELECT IPAddress
 #http://social.technet.microsoft.com/Forums/windowsserver/en-US/40a85c85-1274-4f59-9e54-ad67c4f844f6/trying-to-get-the-ip-address-out-of-a-ping-command-using-regex
-$ip = (Test-Connection $svr -count 1).IPV4Address.ToString()
+#$ip = (Test-Connection $svr -count 1).IPV4Address.ToString()
 #Hyper Threading: http://social.msdn.microsoft.com/Forums/en-US/csharplanguage/thread/f1ed7b15-485c-4c97-9cd1-f7104c369c0d/
 #http://support.microsoft.com/kb/932370
 #MemberRole: http://itknowledgeexchange.techtarget.com/powershell/computer-roles/
@@ -478,7 +502,7 @@ $dt=Get-WMIObject -query "select * from Win32_ComputerSystem" -computername $svr
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting Server Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr while collecting Server Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -498,7 +522,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting Disk and Mountpoint Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr while collecting Disk and Mountpoint Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -516,13 +540,14 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting SQL Services Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr while collecting SQL Services Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
 
 ##################################################SQL Server DB Engine Info ############################################################
 #http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.database.isaccessible.aspx
+#$SQLServerConnection =  $inst
 $result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($inst)
 $responds = $false
 if ($result.ProcessID -ne $null) {
@@ -539,12 +564,13 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[InstanceInfo]”
+#$SQLServerConnection = $inst
 $s = new-object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 $name = $inst.Split("\")
 if ($name.Length -eq 1) { $instname = "MSSQLSERVER" } else { $instname = $name[1]}
 $port = getTcpPort $svr $instname
-$ip = (Test-Connection $svr -count 1).IPV4Address.ToString()
-
+$ip = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $svr | Where {$_.IPAddress } | SELECT IPAddress
+#$ip = (Test-Connection $svr -count 1).IPV4Address.ToString()
 $SQLVersion = GetVersion($s.Version)
 
 #if($s.Version -Like '8.*'){ $SQLVersion = 'SQL Server 2000' } elseif($s.Version -Like '9.*'){ $SQLVersion = 'SQL Server 2005'} elseif($s.Version -Like '10.5*'){ $SQLVersion = 'SQL Server 2008 R2' } 
@@ -557,6 +583,7 @@ $IsSPUpToDate = GetIsUpToDate($s.Version)
 #elseif(($s.Version -Like '10.*') -and ($s.ProductLevel -eq 'SP4')){  $IsSPUpToDate = 'True' } elseif(($s.Version -Like '11.0*') -and ($s.ProductLevel -eq 'SP2')){ $IsSPUpToDate = 'True'} 
 #elseif(($s.Version -Like '12.0*') -and ($s.ProductLevel -eq 'RTM')){ $IsSPUpToDate = 'True'} else { $IsSPUpToDate = 'False'}
 
+
 if($s.edition -Like'*Developer*'){ $SQLEdition = 'Developer Edition'} elseif($s.edition -Like'*Enterprise*'){ $SQLEdition = 'Enterprise Edition'} 
 elseif($s.edition -Like'*Standard*'){ $SQLEdition = 'Standard Edition'} elseif($s.edition -Like'*Express*'){ $SQLEdition = 'Express Edition'} 
 elseif($s.edition -Like'*Web*'){ $SQLEdition = 'Web Edition'} elseif($s.edition -Like'*Business*'){ $SQLEdition = 'BI Edition'} 
@@ -565,8 +592,8 @@ elseif($s.edition -Like'*Desktop*'){ $SQLEdition = 'Desktop Edition'} else{ $SQL
 
 $dt= $s | Select @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}},  @{n="IPAddress";e={$ip}}, @{n="Port";e={$port}}, @{n="SQLVersion";e={$SQLVersion}},
 	ProductLevel,@{n="IsSPUpToDate";e={$IsSPUpToDate}}, @{n="SQLEdition";e={$SQLEdition}}, Version, Collation, RootDirectory, 
-	@{n="DefaultFile";e={if(!$s.DefaultFile){ 'C:\Program Files\Microsoft SQL Server\MSSQL11.MSSQLSERVER\MSSQL\DATA' }  else { $s.DefaultFile} }}, 
-	@{n="DefaultLog";e={if(!$s.DefaultLog){ 'C:\Program Files\Microsoft SQL Server\MSSQL11.MSSQLSERVER\MSSQL\DATA' }  else { $s.DefaultLog} }},
+	@{n="DefaultFile";e={if(!$s.DefaultFile){ 'H:\Temp\Program Files\Microsoft SQL Server\MSSQL11.MSSQLSERVER\MSSQL\DATA' }  else { $s.DefaultFile} }}, 
+	@{n="DefaultLog";e={if(!$s.DefaultLog){ 'H:\Temp\Program Files\Microsoft SQL Server\MSSQL11.MSSQLSERVER\MSSQL\DATA' }  else { $s.DefaultLog} }},
 	ErrorLogPath, IsCaseSensitive, IsClustered, IsFullTextInstalled, IsSingleUser, IsHadrEnabled, TcpEnabled, NamedPipesEnabled, ClusterName, ClusterQuorumState, 
 	ClusterQuorumType, HadrManagerStatus,@{n="MaxMemory";e={$_.Configuration.MaxServerMemory.ConfigValue}}, @{n="MinMemory";e={$_.Configuration.MinServerMemory.ConfigValue}}, 
 	@{n="MaxDOP";e={$_.Configuration.MaxDegreeOfParallelism.ConfigValue}}, @{n="NoOfUsrDBs";e={($_.Databases.Count)-4}}, @{n="NoOfJobs";e={$_.JobServer.Jobs.Count}}, 
@@ -580,7 +607,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting Instance Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr while collecting Instance Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -590,6 +617,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[Jobs]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 $dbs=$s.jobserver.jobs
 $dt= $dbs | select @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}}, name, Description, OwnerLoginName, IsEnabled, 
@@ -600,7 +628,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Job Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Job Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -612,6 +640,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[JobsFailed]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 $jobserver = $s.JobServer
 $jobHistoryFilter = New-Object Microsoft.SqlServer.Management.Smo.Agent.JobHistoryFilter
@@ -623,7 +652,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Failed Jobs  Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Failed Jobs  Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -634,6 +663,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[Logins]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 $dbs=$s.Logins
 $dt= $dbs | SELECT @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}}, Name, LoginType, CreateDate, DateLastModified, 
@@ -643,7 +673,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Login Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Login Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -656,6 +686,10 @@ $query =“select ('$Svr') as ServerName, ('$inst') as InstanceName, m.name as L
 	from sys.server_principals r
 	join sys.server_role_members rm on r.principal_id = rm.role_principal_id
 	join sys.server_principals m on m.principal_id = rm.member_principal_id”
+###########
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");
+##$SQLServerConnection = $inst
+###########
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -665,7 +699,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Instance Roles Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Instance Roles Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -675,6 +709,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[LinkedServers]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 $dbs=$s.linkedservers
 $dt= $dbs | SELECT @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}}, Name, ProviderName, ProductName, ProviderString, 
@@ -684,7 +719,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Linked Servers Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Linked Servers Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -693,6 +728,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[InsTriggers]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 	$dt = $s.Triggers | select @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}}, Name, createdate, datelastmodified, IsEnabled, @{n="DateAdded";e={$RunDt}} |out-datatable
 Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
@@ -700,7 +736,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Instance Level Triggers Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Instance Level Triggers Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -714,7 +750,8 @@ try
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[Inst].[Replication]”
 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.RMO") | Out-Null
-$repsvr=New-Object "Microsoft.SqlServer.Replication.ReplicationServer" $inst
+#$SQLServerConnection = $inst
+$repsvr=New-Object "Microsoft.SqlServer.Replication.ReplicationServer" $SQLServerConnection
 
 if($repsvr.IsPublisher -eq $true){
 $dt = $repsvr | select @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}}, IsPublisher, IsDistributor, DistributorAvailable, @{n="Publisher"; e={$_.SQLServerName}}, 
@@ -728,7 +765,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Replication Publisher  Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Replication Publisher  Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -741,6 +778,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[DB].[DatabaseInfo]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 #$dbs=$s.Databases
 foreach ($db in $s.Databases) {
@@ -767,7 +805,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Database Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Database Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -792,6 +830,8 @@ $query= "IF SERVERPROPERTY ('IsHadrEnabled') = 1
 	Inner Join sys.availability_group_listener_ip_addresses AGLIP on AGL.listener_id = AGLIP.listener_id
 	Where ARS.Role_Desc ='Primary'
 	END"
+	
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");		
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -801,7 +841,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Availability Groups Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Availability Groups Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -822,6 +862,7 @@ $query= "IF SERVERPROPERTY ('IsHadrEnabled') = 1
 		Inner Join sys.dm_hadr_availability_replica_states ARS on ARS.Group_id = Ag.Group_id 
 		where ARS.Role_Desc ='Primary' and DRS.database_state_desc = 'Online'
 		END"
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");		
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -831,7 +872,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Availability Databases Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Availability Databases Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -852,6 +893,7 @@ $query= "IF SERVERPROPERTY ('IsHadrEnabled') = 1
 		Inner Join sys.dm_hadr_availability_replica_states ARS on ARS.replica_id = AR.replica_id
 		Where Ar.Replica_server_name = @@ServerName
 		End"
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");		
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -861,7 +903,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Availability Replicas Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Availability Replicas Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -872,6 +914,7 @@ try
 {
 $ErrorActionPreference = "Stop"; #Make all errors terminating
 $CITbl = "[DB].[Triggers]”
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 foreach ($db in $s.Databases) {
 if ($db.IsAccessible -eq $True) {
@@ -884,7 +927,7 @@ if ($db.IsAccessible -eq $True) {
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting DB Level Trigger Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting DB Level Trigger Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -914,6 +957,7 @@ $query= "declare @db varchar(200), @sqlstmt nvarchar(4000)
 	DEALLOCATE dbs
 	SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, DBname, DBuser,  DBRole, ('$RunDt') as DateAdded FROM ##dbroles
 	DROP TABLE ##dbroles"
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");		
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -923,7 +967,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting DB user roles Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting DB user roles Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -959,7 +1003,8 @@ $query= "SELECT
 	bs.recovery_model,
 	bs.is_copy_only,
 	bs.is_password_protected,
-	bs.has_backup_checksums  
+	bs.has_backup_checksums,
+    ('$RunDt') as DateAdded
 FROM   msdb.dbo.backupmediafamily   bmf
 INNER JOIN msdb.dbo.backupset bs ON bmf.media_set_id = bs.media_set_id  
 where isnull(bs.name, '0') != '1';"
@@ -968,8 +1013,7 @@ $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
 #$cn.Close()
 Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
-$query = "set nocount on; update msdb.dbo.backupset set [name] = '1' where isnull([name], '0') != '1';" 
-#Set the Name field to a value to capture that we have collected this information already
+$query= "set nocount on; update msdb.dbo.backupset set [name] = '1' where isnull([name], '0') != '1';"
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 }
 catch 
@@ -989,6 +1033,7 @@ $query= "select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(datab
         ,case (is_percent_growth) WHEN 0 THEN growth*8/1024 ELSE 0 END  as GrowthInMB, ('$RunDt') as DateAdded
         from sys.master_files
         WHERE type in (0, 1);"
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");		
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -999,7 +1044,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting DB Files Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting DB Files Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -1013,6 +1058,7 @@ $query= "select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(datab
         from sys.master_files
         WHERE type in (0, 1)
 	Group By DB_Name(database_id);"
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");	
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -1022,7 +1068,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting DBGrwoth Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting DBGrwoth Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -1054,6 +1100,7 @@ $query= "declare @db varchar(200), @sqlstmt nvarchar(4000)
 		DEALLOCATE dbs
 		SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, *, ('$RunDt') as DateAdded FROM #tmpuserperm ORDER BY dbname
 		DROP TABLE #tmpuserperm"
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");		
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -1063,7 +1110,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Table Permissions Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Table Permissions Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -1098,6 +1145,8 @@ $query= "IF SERVERPROPERTY ('IsXTPSupported') = 1
 	SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, *, ('$RunDt') as DateAdded FROM ##tmpHekaton ORDER BY dbname
 	DROP TABLE ##tmpHekaton
 	END"
+	
+# $SQLServerConnection = new-object system.data.SqlClient.SqlConnection("server=$inst;database=tempdb;Integrated Security=true;");	
 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 $dt = new-object System.Data.DataTable
 $da.fill($dt) | out-null
@@ -1107,7 +1156,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting Hekaton Tables Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting Hekaton Tables Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -1116,7 +1165,7 @@ catch
 }
 else {
              
-              write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst"  -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+              write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst"  -NoConsoleOut -Path $errorPath
      }
 #################################################### Reporting Services Info  ############################################################
 #http://msdn.microsoft.com/en-us/library/ms152836.aspx
@@ -1149,6 +1198,7 @@ $dt = Get-WmiObject -class MSReportServer_Instance -namespace $rs_namespace   -c
 Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
 
 $CITbl="[RS].[SSRSConfig]"
+#$SQLServerConnection = $inst
 $s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $inst
 if($s.Version -Like '9.*'){ $rs_namespace = 'root\Microsoft\SqlServer\ReportServer\v9\Admin' } 
 elseif ($s.Version -Like '10.*') { $rs_namespace = "root\Microsoft\SqlServer\ReportServer\RS_" + $instname + "\v10\Admin" }
@@ -1164,14 +1214,14 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 }
 else
 {
-	Write-log -Message "Reporting Services is not Installed or Started or inaccessible on $inst"  -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+	Write-log -Message "Reporting Services is not Installed or Started or inaccessible on $inst"  -NoConsoleOut -Path $errorPath
 }
 
 }
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting RS Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting RS Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -1184,17 +1234,22 @@ $responds = $false
 if ($results.ProcessID -ne $null) { $responds = $true }
 if ($responds) {
 $S = New-Object ('Microsoft.AnalysisServices.Server')
-$s.connect("$inst")
+#$SQLServerConnection = $inst
+$s.connect("$SQLServerConnection")
 
 $CITbl="[AS].[SSASInfo]"
 
-if($s.Version -Like '8.*'){ $SQLASVersion = 'SQL Server 2000'} elseif($s.Version -Like '9.*'){ $SQLASVersion = 'SQL Server 2005'} elseif($s.Version -Like '10.5*'){ $SQLASVersion = 'SQL Server 2008 R2' } 
-elseif($s.Version -Like '10.*'){ $SQLASVersion = 'SQL Server 2008' } elseif($s.Version -Like '11.0*'){ $SQLASVersion = 'SQL Server 2012'} 
-elseif($s.Version -Like '12.0*'){ $SQLASVersion = 'SQL Server 2014'} else { $SQLASVersion ='Unknown'}
+$SQLVersion = GetVersion($s.Version)
 
-if(($s.Version -Like '8.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDateOnAS = 'True'} elseif(($s.Version -Like '9.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDateOnAS = 'True'} elseif(($s.Version -Like '10.5*') -and ($s.ProductLevel -eq 'SP3')){ $IsSPUpToDateOnAS = 'True' } 
-elseif(($s.Version -Like '10.*') -and ($s.ProductLevel -eq 'SP4')){  $IsSPUpToDateOnAS = 'True' } elseif(($s.Version -Like '11.0*') -and ($s.ProductLevel -eq 'SP2')){ $IsSPUpToDateOnAS = 'True'} 
-elseif(($s.Version -Like '12.0*') -and ($s.ProductLevel -eq 'RTM')){ $IsSPUpToDateOnAS = 'True'} else { $IsSPUpToDateOnAS = 'False'}
+#if($s.Version -Like '8.*'){ $SQLVersion = 'SQL Server 2000' } elseif($s.Version -Like '9.*'){ $SQLVersion = 'SQL Server 2005'} elseif($s.Version -Like '10.5*'){ $SQLVersion = 'SQL Server 2008 R2' } 
+#elseif($s.Version -Like '10.*'){ $SQLVersion = 'SQL Server 2008' } elseif($s.Version -Like '11.0*'){ $SQLVersion = 'SQL Server 2012'} 
+#elseif($s.Version -Like '12.0*'){ $SQLVersion = 'SQL Server 2014'} else { $SQLVersion ='Unknown'}
+
+$IsSPUpToDate = GetIsUpToDate($s.Version)
+
+#if(($s.Version -Like '8.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDate = 'True'} elseif(($s.Version -Like '9.*') -and ($s.ProductLevel -eq 'SP4')){ $IsSPUpToDate = 'True'} elseif(($s.Version -Like '10.5*') -and ($s.ProductLevel -eq 'SP3')){ $IsSPUpToDate = 'True' } 
+#elseif(($s.Version -Like '10.*') -and ($s.ProductLevel -eq 'SP4')){  $IsSPUpToDate = 'True' } elseif(($s.Version -Like '11.0*') -and ($s.ProductLevel -eq 'SP2')){ $IsSPUpToDate = 'True'} 
+#elseif(($s.Version -Like '12.0*') -and ($s.ProductLevel -eq 'RTM')){ $IsSPUpToDate = 'True'} else { $IsSPUpToDate = 'False'}
 
 if($s.edition -Like'*Developer*'){ $SQLASEdition = 'Developer Edition'} elseif($s.edition -Like'*Enterprise*'){ $SQLASEdition = 'Enterprise Edition'} 
 elseif($s.edition -Like'*Standard*'){ $SQLASEdition = 'Standard Edition'} elseif($s.edition -Like'*Express*'){ $SQLASEdition = 'Express Edition'} 
@@ -1214,13 +1269,13 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 }
 else
 {
-	Write-log -Message "Analysis Services is not Installed or Started or inaccessible on $svr" -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+	Write-log -Message "Analysis Services is not Installed or Started or inaccessible on $svr" -NoConsoleOut -Path $errorPath
 }
 }
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr While Collecting AS Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+        write-log -Message "$ex.Message on $svr While Collecting AS Info" -Level Error -NoConsoleOut -Path $errorPath
 }finally{
    $ErrorActionPreference = "Continue"; #Reset the error action pref to default
 }
@@ -1230,46 +1285,67 @@ catch
 catch 
 { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr while collecting Server and SQL Info" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
-}  
+        write-log -Message "$ex.Message on $svr while collecting Server and SQL Info" -Level Error -NoConsoleOut -Path $errorPath
+} 
+
+
 #GetServerListInfo -ErrorAction "SilentlyContinue" 
 ######################################################################################################################################
 $cn = new-object system.data.sqlclient.sqlconnection(“server=$SQLInst;database=$CentralDB;Integrated Security=true;”);
 $cn.Open()
 $cmd = $cn.CreateCommand()
-$query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Inventory='True';"
+if ($runLocally -eq "true")
+{
+    $query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Inventory='True' and ServerName = '$env:computername';"
+}
+else
+{
+    $query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Inventory='True';"
+}
 $cmd.CommandText = $query
 #$null = $cmd.ExecuteNonQuery()
 $reader = $cmd.ExecuteReader()
 while($reader.Read()) {
  
    	# Get ServerName and InstanceName from CentralDB
-	$server = $reader['ServerName']
-	$instance = $reader['InstanceName']
-    	$result = gwmi -query "select StatusCode from Win32_PingStatus where Address = '$server'"
+	    $server = $reader['ServerName']
+	    $instance = $reader['InstanceName']
+    	
+    if ($runLocally -eq "true")
+    {
+        $result = gwmi -query "select StatusCode from Win32_PingStatus where Address = '$server'"
        	$responds = $false
-	# If the machine responds break out of the result loop and indicate success
-    	if ($result.statuscode -eq 0) {
+        if ($result.statuscode -eq 0) 
+        {
         	$responds = $true
     	}
-    	If ($responds) {
+    }
+    else
+    {
+    	$responds = $true
+	}
+
+    If ($responds) 
+    {
         # Calling funtion and passing server and instance parameters
-		GetServerListInfo $server $instance
- 
-    	}
-    	else {
- 	# Let the user know we couldn't connect to the server
-		write-log -Message "$server Server did not respond" -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
-       	}
- 
+	    GetServerListInfo $server $instance 
+    }
+    else 
+    {
+ 	    # Let the user know we couldn't connect to the server
+		write-log -Message "$server Server did not respond" -NoConsoleOut -Path $errorPath
+    } 
 }
 ###################################################################Delete old data#################################################################
-$cn = new-object system.data.SqlClient.SqlConnection(“server=$SQLInst;database=$CentralDB;Integrated Security=true;”);
-$cn.Open()
-$cmd = $cn.CreateCommand()
-$q = "exec [dbo].[usp_DelData] 14, 365, 180, 365"
-$cmd.CommandText = $q
-$null = $cmd.ExecuteNonQuery()
-$cn.Close()
-write-log -Message "Script Ended at $(get-date)" -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
-write-log -Message "Total Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
+if ($runLocally -ne "true")
+{
+    $cn = new-object system.data.SqlClient.SqlConnection(“server=$SQLInst;database=$CentralDB;Integrated Security=true;”);
+    $cn.Open()
+    $cmd = $cn.CreateCommand()
+    $q = "exec [dbo].[usp_DelData] 14, 365, 180, 365"
+    $cmd.CommandText = $q
+    $null = $cmd.ExecuteNonQuery()
+    $cn.Close()
+}
+write-log -Message "Script Ended at $(get-date)" -NoConsoleOut -Path $errorPath
+write-log -Message "Total Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -NoConsoleOut -Path $errorPath
