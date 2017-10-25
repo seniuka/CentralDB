@@ -6,8 +6,10 @@ http://www.sqlservercentral.com/articles/baselines/94657/
 https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/#>
 ###################################################################################################################################
 param(
-	[string]$SQLInst="localhost",
-	[string]$Centraldb="CentralDB"
+	[string]$SQLInst="",
+	[string]$Centraldb="CentralDB",
+    	[string]$runLocally="false", #True/False If you deploy this to run locally it will perform better then a remote run
+	[string]$errorPath	#\\path\WaitStats_" + $env:computername + ".log"
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -73,12 +75,12 @@ function Write-DataTable
     Catch [System.Management.Automation.MethodInvocationException]
     {
 	$ex = $_.Exception 
-	write-log -Message "$ex.Message on $svr" -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\WaitStatslog.log
+	write-log -Message "$ex.Message on $svr" -Level Error  -Path $errorPath
     }
     catch 
     { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr"  -Level Error -NoConsoleOut -Path C:\CentralDB\Errorlog\WaitStatslog.log
+        write-log -Message "$ex.Message on $svr"  -Level Error  -Path $errorPath
     } 
 } #Write-DataTable
 ###########################################################################################################################
@@ -272,9 +274,9 @@ function Write-Log {
                     .PARAMETER EventID
                             The ID to appear as the event ID attribute for the system event log entry. This is ignored unless 'EventLogName' is specified.     
                     .EXAMPLE
-                            PS C:\> Write-Log -Message "It's all good!" -Path C:\MyLog.log -Clobber -EventLogName 'Application'     
+                            PS H:\Temp\> Write-Log -Message "It's all good!" -Path H:\Temp\MyLog.log -Clobber -EventLogName 'Application'     
                     .EXAMPLE
-                            PS C:\> Write-Log -Message "Oops, not so good!" -Level Error -EventID 3 -Indent 2 -EventLogName 'Application' -EventSource "My Script"     
+                            PS H:\Temp\> Write-Log -Message "Oops, not so good!" -Level Error -EventID 3 -Indent 2 -EventLogName 'Application' -EventSource "My Script"     
                     .INPUTS
                             System.String     
                     .OUTPUTS
@@ -287,7 +289,7 @@ function Write-Log {
     }
 #http://poshtips.com/measuring-elapsed-time-in-powershell/
 $ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
-write-log -Message "Script Started at $(get-date)" -NoConsoleOut -Clobber -Path C:\CentralDB\Errorlog\WaitStatslog.log
+write-log -Message "Script Started at $(get-date)"  -Clobber -Path $errorPath
 ######################################################################################################################################
 #Fucntion to get Server list info
 function GetServerListInfo($svr, $inst) {
@@ -326,7 +328,7 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 	{ 
         $ex = $_.Exception 
-	write-log -Message "$ex.Message on $Svr While collecting Missing Indexes "  -NoConsoleOut -Path C:\CentralDB\Errorlog\WaitStatslog.log 
+	write-log -Message "$ex.Message on $Svr While collecting Missing Indexes "   -Path $errorPath 
 	} finally{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
@@ -375,40 +377,59 @@ Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl 
 catch 
 	{ 
         $ex = $_.Exception 
-	write-log -Message "$ex.Message on $Svr While collecting Wait Stats "  -NoConsoleOut -Path C:\CentralDB\Errorlog\WaitStatslog.log 
+	write-log -Message "$ex.Message on $Svr While collecting Wait Stats "   -Path $errorPath 
 	} finally{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
 }
 ######################################################################################################################################
+
 $cn = new-object system.data.sqlclient.sqlconnection(“server=$SQLInst;database=$CentralDB;Integrated Security=true;”);
 $cn.Open()
 $cmd = $cn.CreateCommand()
-$query = " Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline = 'True';"
+if ($runLocally -eq "true")
+{
+    $query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline='True' and ServerName = '$env:computername';"
+}
+else
+{
+    $query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline='True';"
+}
 $cmd.CommandText = $query
 #$null = $cmd.ExecuteNonQuery()
 $reader = $cmd.ExecuteReader()
 while($reader.Read()) {
  
-   	# Get ServerName and InstanceName from CentralDB
+	# Get ServerName and InstanceName from CentralDB
 	$server = $reader['ServerName']
 	$instance = $reader['InstanceName']
-    	$result = gwmi -query "select StatusCode from Win32_PingStatus where Address = '$server'"
-       	$responds = $false
-	# If the machine responds break out of the result loop and indicate success
-    	if ($result.statuscode -eq 0) {
-        	$responds = $true
-    	}
-    	If ($responds) {
-        # Calling funtion and passing server and instance parameters
-		GetServerListInfo $server $instance
  
-    	}
-    	else {
- 	# Let the user know we couldn't connect to the server
-		write-log -Message "$server Server did not respond" -NoConsoleOut -Path C:\CentralDB\Errorlog\CentralInventorylog.log
-       	}
+    if ($runLocally -eq "true")
+    {
+        $result = gwmi -query "select StatusCode from Win32_PingStatus where Address = '$server'"
+        $responds = $false
+        if ($result.statuscode -eq 0) 
+        {
+            $responds = $true
+        }
+    }
+    else
+    {
+        $responds = $true
+    }
+
+    If ($responds) 
+    {
+        # Calling funtion and passing server and instance parameters
+	    GetServerListInfo $server $instance
+ 
+    }
+    else 
+    {
+        # Let the user know we couldn't connect to the server
+	    write-log -Message "$server Server did not respond"  -Path $errorPath
+    }
  
 }
-write-log -Message "Script Ended at $(get-date)" -NoConsoleOut -Path C:\CentralDB\Errorlog\WaitStatslog.log
-write-log -Message "Total Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -NoConsoleOut -Path C:\CentralDB\Errorlog\WaitStatslog.log
+write-log -Message "Script Ended at $(get-date)"  -Path $errorPath
+write-log -Message "Total Elapsed Time: $($ElapsedTime.Elapsed.ToString())"  -Path $errorPath
