@@ -6,19 +6,50 @@ http://www.sqlservercentral.com/articles/baselines/94657/
 https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/#>
 ###################################################################################################################################
 param(
-	[string]$SQLInst="",
-	[string]$Centraldb="CentralDB",
-    [string]$runLocally="false", #True/False If you deploy this to run locally it will perform better then a remote run
-	[string]$errorPath	#\\path\WaitStats_" + $env:computername + ".log"
+	[string]$InstanceName="",
+	[string]$DatabaseName="",
+    [string]$runLocally="false",
+	[string]$logPath="",
+	[string]$logFileName="WaitStats_" + $env:computername + ".log"
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SqlWmiManagement') | out-null
 #####################################################################################################################################
-<#Author: Chad Miller http://Sev17.com
-Write-DataTable Function: http://gallery.technet.microsoft.com/scriptcenter/2fdeaf8d-b164-411c-9483-99413d6053ae
-Out-DataTable Function: http://gallery.technet.microsoft.com/scriptcenter/4208a159-a52e-4b99-83d4-8048468d29dd #>
+
 #####################################################################################################################################
+#Get-Type
+function Get-Type 
+{ 
+    param($type) 
+ $types = @( 
+'System.Boolean', 
+'System.Byte[]', 
+'System.Byte', 
+'System.Char', 
+'System.Datetime', 
+'System.Decimal', 
+'System.Double', 
+'System.Guid', 
+'System.Int16', 
+'System.Int32', 
+'System.Int64', 
+'System.Single', 
+'System.UInt16', 
+'System.UInt32', 
+'System.UInt64') 
+ if ( $types -contains $type ) { 
+        Write-Output "$type" 
+    } 
+    else { 
+        Write-Output 'System.String'      
+    } 
+} #Get-Type 
+#####################################################################################################################################
+
+#####################################################################################################################################
+#Write-DataTable 
+<# Author: Chad Miller http://Sev17.com Write-DataTable Function: http://gallery.technet.microsoft.com/scriptcenter/2fdeaf8d-b164-411c-9483-99413d6053ae #>
 <# 
 .SYNOPSIS 
 Writes data only to SQL Server tables. 
@@ -54,8 +85,11 @@ function Write-DataTable
     [Parameter(Position=5, Mandatory=$false)] [string]$Password, 
     [Parameter(Position=6, Mandatory=$false)] [Int32]$BatchSize=50000, 
     [Parameter(Position=7, Mandatory=$false)] [Int32]$QueryTimeout=0, 
-    [Parameter(Position=8, Mandatory=$false)] [Int32]$ConnectionTimeout=15 
+    [Parameter(Position=8, Mandatory=$false)] [Int32]$ConnectionTimeout=30 
     ) 
+	
+	#write-output $ServerInstance
+	#write-output $Data
      $conn=new-object System.Data.SqlClient.SQLConnection  
     if ($Username) 
     { $ConnectionString = "Server={0};Database={1};User ID={2};Password={3};Trusted_Connection=False;Connect Timeout={4}" -f $ServerInstance,$Database,$Username,$Password,$ConnectionTimeout } 
@@ -74,42 +108,22 @@ function Write-DataTable
     } 
     Catch [System.Management.Automation.MethodInvocationException]
     {
+		#write-output $ServerInstance
+	write-output $Data
 	$ex = $_.Exception 
-	write-log -Message "$ex.Message on $svr" -Level Error  -Path $errorPath
+	write-log -Message "$ex.Message on $svr" -Level Error -NoConsoleOut -Path $logPath
     }
     catch 
     { 
         $ex = $_.Exception 
-        write-log -Message "$ex.Message on $svr"  -Level Error  -Path $errorPath
+        write-log -Message "$ex.Message on $svr"  -Level Error -NoConsoleOut -Path $logPath
     } 
 } #Write-DataTable
-###########################################################################################################################
-function Get-Type 
-{ 
-    param($type) 
- $types = @( 
-'System.Boolean', 
-'System.Byte[]', 
-'System.Byte', 
-'System.Char', 
-'System.Datetime', 
-'System.Decimal', 
-'System.Double', 
-'System.Guid', 
-'System.Int16', 
-'System.Int32', 
-'System.Int64', 
-'System.Single', 
-'System.UInt16', 
-'System.UInt32', 
-'System.UInt64') 
- if ( $types -contains $type ) { 
-        Write-Output "$type" 
-    } 
-    else { 
-        Write-Output 'System.String'      
-    } 
-} #Get-Type 
+#####################################################################################################################################
+
+#####################################################################################################################################
+#Out-DataTable
+<# Author: Chad Miller http://Sev17.com Out-DataTable Function: http://gallery.technet.microsoft.com/scriptcenter/4208a159-a52e-4b99-83d4-8048468d29dd #>
 <# 
 .SYNOPSIS 
 Creates a DataTable for an object 
@@ -179,9 +193,50 @@ function Out-DataTable
         Write-Output @(,($dt)) 
     } 
 } #Out-DataTable
-##########################################logging####################################################################################
-#http://poshcode.org/2813
-function Write-Log {   
+#####################################################################################################################################
+
+#####################################################################################################################################
+#Write-Log
+<#
+        .SYNOPSIS
+                Writes logging information to screen and log file simultaneously.    
+        .DESCRIPTION
+                Writes logging information to screen and log file simultaneously. Supports multiple log levels.     
+        .PARAMETER Message
+                The message to be logged.     
+        .PARAMETER Level
+                The type of message to be logged.                         
+        .PARAMETER NoConsoleOut
+                Specifies to not display the message to the console.                        
+        .PARAMETER ConsoleForeground
+                Specifies what color the text should be be displayed on the console. Ignored when switch 'NoConsoleOut' is specified.                  
+        .PARAMETER Indent
+                The number of spaces to indent the line in the log file.     
+        .PARAMETER Path
+                The log file path.                  
+        .PARAMETER Clobber
+                Existing log file is deleted when this is specified.                   
+        .PARAMETER EventLogName
+                The name of the system event log, e.g. 'Application'.                   
+        .PARAMETER EventSource
+                The name to appear as the source attribute for the system event log entry. This is ignored unless 'EventLogName' is specified.                   
+        .PARAMETER EventID
+                The ID to appear as the event ID attribute for the system event log entry. This is ignored unless 'EventLogName' is specified.     
+        .EXAMPLE
+                PS H:\Temp\> Write-Log -Message "It's all good!" -Path H:\Temp\MyLog.log -Clobber -EventLogName 'Application'     
+        .EXAMPLE
+                PS H:\Temp\> Write-Log -Message "Oops, not so good!" -Level Error -EventID 3 -Indent 2 -EventLogName 'Application' -EventSource "My Script"     
+        .INPUTS
+                System.String     
+        .OUTPUTS
+                No output.                           
+        .NOTES
+                Revision History:
+                        2011-03-10 : Andy Arismendi - Created.
+                        2011-07-23 : Will Steele - Updated.
+#>
+function Write-Log 
+{   
             #region Parameters
                     [cmdletbinding()]
                     Param(
@@ -248,188 +303,165 @@ function Write-Log {
                     }
             }    
             End {}    
-            <#
-                    .SYNOPSIS
-                            Writes logging information to screen and log file simultaneously.    
-                    .DESCRIPTION
-                            Writes logging information to screen and log file simultaneously. Supports multiple log levels.     
-                    .PARAMETER Message
-                            The message to be logged.     
-                    .PARAMETER Level
-                            The type of message to be logged.                         
-                    .PARAMETER NoConsoleOut
-                            Specifies to not display the message to the console.                        
-                    .PARAMETER ConsoleForeground
-                            Specifies what color the text should be be displayed on the console. Ignored when switch 'NoConsoleOut' is specified.                  
-                    .PARAMETER Indent
-                            The number of spaces to indent the line in the log file.     
-                    .PARAMETER Path
-                            The log file path.                  
-                    .PARAMETER Clobber
-                            Existing log file is deleted when this is specified.                   
-                    .PARAMETER EventLogName
-                            The name of the system event log, e.g. 'Application'.                   
-                    .PARAMETER EventSource
-                            The name to appear as the source attribute for the system event log entry. This is ignored unless 'EventLogName' is specified.                   
-                    .PARAMETER EventID
-                            The ID to appear as the event ID attribute for the system event log entry. This is ignored unless 'EventLogName' is specified.     
-                    .EXAMPLE
-                            PS H:\Temp\> Write-Log -Message "It's all good!" -Path H:\Temp\MyLog.log -Clobber -EventLogName 'Application'     
-                    .EXAMPLE
-                            PS H:\Temp\> Write-Log -Message "Oops, not so good!" -Level Error -EventID 3 -Indent 2 -EventLogName 'Application' -EventSource "My Script"     
-                    .INPUTS
-                            System.String     
-                    .OUTPUTS
-                            No output.                           
-                    .NOTES
-                            Revision History:
-                                    2011-03-10 : Andy Arismendi - Created.
-                                    2011-07-23 : Will Steele - Updated.
-            #>
-    }
-#http://poshtips.com/measuring-elapsed-time-in-powershell/
-$ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
-write-log -Message "Script Started at $(get-date)"  -Clobber -Path $errorPath
+
+    } #Write-Log
+#####################################################################################################################################
+
 ######################################################################################################################################
 #Fucntion to get Server list info
-function GetServerListInfo($svr, $inst) {
-# Create an ADO.Net connection to the instance
-$cn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master");
-$s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $cn
-$RunDt = Get-Date -format G
-################################################## Missing Indexes #################################################################
-try 
-{ 
-$ErrorActionPreference = "Stop"; #Make all errors terminating
-$CITbl = “[Inst].[MissingIndexes]”
-$query= "Select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(mid.database_id) as DBName, OBJECT_SCHEMA_NAME(mid.[object_id], mid.database_id) as SchemaName, 
-	mid.statement as MITable,migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) AS improvement_measure, 
-  'CREATE INDEX [IDX'
-  + '_' + LEFT (PARSENAME(mid.statement, 1), 32) + ']'
-  + ' ON ' + mid.statement 
-  + ' (' + ISNULL (mid.equality_columns,'') 
-    + CASE WHEN mid.equality_columns IS NOT NULL AND mid.inequality_columns IS NOT NULL THEN ',' ELSE '' END 
-    + ISNULL (mid.inequality_columns, '')
-  + ')' 
-  + ISNULL (' INCLUDE (' + mid.included_columns + ')', '') AS create_index_statement,
-  migs.group_handle, migs.unique_compiles, migs.user_seeks, migs.last_user_seek, migs.avg_total_user_cost, migs.avg_user_impact, ('$RunDt') as DateAdded
-FROM sys.dm_db_missing_index_groups mig
-INNER JOIN sys.dm_db_missing_index_group_stats migs ON migs.group_handle = mig.index_group_handle
-INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
-WHERE migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) > 100000
-ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC"
+function GetServerListInfo($svr, $inst) 
+{
+	$cn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master");
+	$s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $cn
+	$RunDt = Get-Date -format G
 
-$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-$dt = new-object System.Data.DataTable
-$da.fill($dt) | out-null
-#$cn.Close()
-Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
-}    
-catch 
+	### Missing Indexes #############################################################################################################
+	try 
 	{ 
-        $ex = $_.Exception 
-	write-log -Message "$ex.Message on $Svr While collecting Missing Indexes "   -Path $errorPath 
-	} finally{
+		$ErrorActionPreference = "Stop"; #Make all errors terminating
+		$CITbl = “[Inst].[MissingIndexes]”
+		$query= "Select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(mid.database_id) as DBName, OBJECT_SCHEMA_NAME(mid.[object_id], mid.database_id) as SchemaName, 
+			mid.statement as MITable,migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) AS improvement_measure, 
+		  'CREATE INDEX [IDX'
+		  + '_' + LEFT (PARSENAME(mid.statement, 1), 32) + ']'
+		  + ' ON ' + mid.statement 
+		  + ' (' + ISNULL (mid.equality_columns,'') 
+			+ CASE WHEN mid.equality_columns IS NOT NULL AND mid.inequality_columns IS NOT NULL THEN ',' ELSE '' END 
+			+ ISNULL (mid.inequality_columns, '')
+		  + ')' 
+		  + ISNULL (' INCLUDE (' + mid.included_columns + ')', '') AS create_index_statement,
+		  migs.group_handle, migs.unique_compiles, migs.user_seeks, migs.last_user_seek, migs.avg_total_user_cost, migs.avg_user_impact, ('$RunDt') as DateAdded
+		FROM sys.dm_db_missing_index_groups mig
+		INNER JOIN sys.dm_db_missing_index_group_stats migs ON migs.group_handle = mig.index_group_handle
+		INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
+		WHERE migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) > 100000
+		ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC"
+
+		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+		$dt = new-object System.Data.DataTable
+		$da.fill($dt) | out-null
+		Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
+		write-log -Message "Collecting Missing Index Info" -Level Info -Path $logPath
+	}    
+	catch 
+	{ 
+		$ex = $_.Exception 
+		write-log -Message "$ex.Message on $Svr While Collecting Missing Index Info" -Level Warn -Path $logPath 
+	} 
+	finally
+	{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
-################################################## Wait Stats #################################################################
+	#################################################################################################################################
+
+	### Wait Stats ##################################################################################################################
+	try
+	{
+	$ErrorActionPreference = "Stop"; #Make all errors terminating
+	$CITbl = “[Inst].[WaitStats]”
+	$query= ";WITH [Waits] AS
+			 (SELECT [wait_type], [wait_time_ms] / 1000.0 AS [WaitS],
+				([wait_time_ms] - [signal_wait_time_ms]) / 1000.0 AS [ResourceS],
+				[signal_wait_time_ms] / 1000.0 AS [SignalS],
+				[waiting_tasks_count] AS [WaitCount],
+				100.0 * [wait_time_ms] / SUM ([wait_time_ms]) OVER() AS [Percentage],
+				ROW_NUMBER() OVER(ORDER BY [wait_time_ms] DESC) AS [RowNum]
+			 FROM sys.dm_os_wait_stats
+			 WHERE [wait_type] NOT IN ('CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE', 'SLEEP_TASK',
+			'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH', 'WAITFOR', 'LOGMGR_QUEUE',
+			'CHECKPOINT_QUEUE', 'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BROKER_TO_FLUSH',
+			'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT', 'CLR_AUTO_EVENT', 'DISPATCHER_QUEUE_SEMAPHORE',
+			'FT_IFTS_SCHEDULER_IDLE_WAIT', 'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'BROKER_EVENTHANDLER',
+			'TRACEWRITE', 'FT_IFTSHC_MUTEX', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', 'DIRTY_PAGE_POLL', 'HADR_FILESTREAM_IOMGR_IOCOMPLETION')
+			 )
+	 SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, 
+			 [W1].[wait_type] AS [WaitType], 
+			 CAST ([W1].[WaitS] AS DECIMAL(14, 2)) AS [Wait_S],
+			 CAST ([W1].[ResourceS] AS DECIMAL(14, 2)) AS [Resource_S],
+			 CAST ([W1].[SignalS] AS DECIMAL(14, 2)) AS [Signal_S],
+			 [W1].[WaitCount] AS [WaitCount],
+			 CAST ([W1].[Percentage] AS DECIMAL(4, 2)) AS [Percentage],
+			 CAST (([W1].[WaitS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgWait_S],
+			 CAST (([W1].[ResourceS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgRes_S],
+			 CAST (([W1].[SignalS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgSig_S], ('$RunDt') as DateAdded
+		  FROM [Waits] AS [W1]
+		  INNER JOIN [Waits] AS [W2]
+			 ON [W2].[RowNum] <= [W1].[RowNum]
+		  GROUP BY [W1].[RowNum], [W1].[wait_type], [W1].[WaitS], 
+			 [W1].[ResourceS], [W1].[SignalS], [W1].[WaitCount], [W1].[Percentage]
+		  HAVING SUM ([W2].[Percentage]) - [W1].[Percentage] < 95"
+	$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+	$dt = new-object System.Data.DataTable
+	$da.fill($dt) | out-null
+	#$cn.Close()
+	Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
+	}    
+	catch 
+	{ 
+			$ex = $_.Exception 
+		write-log -Message "$ex.Message on $Svr While collecting Wait Stats "   -Path $logPath 
+		} 
+	finally
+	{
+   			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+		}
+	#################################################################################################################################
+}
+#####################################################################################################################################
+
+######################################################################################################################################
+#Execute Script
 try
 {
-$ErrorActionPreference = "Stop"; #Make all errors terminating
-$CITbl = “[Inst].[WaitStats]”
-$query= ";WITH [Waits] AS
-         (SELECT [wait_type], [wait_time_ms] / 1000.0 AS [WaitS],
-            ([wait_time_ms] - [signal_wait_time_ms]) / 1000.0 AS [ResourceS],
-            [signal_wait_time_ms] / 1000.0 AS [SignalS],
-            [waiting_tasks_count] AS [WaitCount],
-            100.0 * [wait_time_ms] / SUM ([wait_time_ms]) OVER() AS [Percentage],
-            ROW_NUMBER() OVER(ORDER BY [wait_time_ms] DESC) AS [RowNum]
-         FROM sys.dm_os_wait_stats
-         WHERE [wait_type] NOT IN ('CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE', 'SLEEP_TASK',
-        'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH', 'WAITFOR', 'LOGMGR_QUEUE',
-        'CHECKPOINT_QUEUE', 'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BROKER_TO_FLUSH',
-        'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT', 'CLR_AUTO_EVENT', 'DISPATCHER_QUEUE_SEMAPHORE',
-        'FT_IFTS_SCHEDULER_IDLE_WAIT', 'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'BROKER_EVENTHANDLER',
-        'TRACEWRITE', 'FT_IFTSHC_MUTEX', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', 'DIRTY_PAGE_POLL', 'HADR_FILESTREAM_IOMGR_IOCOMPLETION')
-         )
- SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, 
-         [W1].[wait_type] AS [WaitType], 
-         CAST ([W1].[WaitS] AS DECIMAL(14, 2)) AS [Wait_S],
-         CAST ([W1].[ResourceS] AS DECIMAL(14, 2)) AS [Resource_S],
-         CAST ([W1].[SignalS] AS DECIMAL(14, 2)) AS [Signal_S],
-         [W1].[WaitCount] AS [WaitCount],
-         CAST ([W1].[Percentage] AS DECIMAL(4, 2)) AS [Percentage],
-         CAST (([W1].[WaitS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgWait_S],
-         CAST (([W1].[ResourceS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgRes_S],
-         CAST (([W1].[SignalS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgSig_S], ('$RunDt') as DateAdded
-      FROM [Waits] AS [W1]
-      INNER JOIN [Waits] AS [W2]
-         ON [W2].[RowNum] <= [W1].[RowNum]
-      GROUP BY [W1].[RowNum], [W1].[wait_type], [W1].[WaitS], 
-         [W1].[ResourceS], [W1].[SignalS], [W1].[WaitCount], [W1].[Percentage]
-      HAVING SUM ([W2].[Percentage]) - [W1].[Percentage] < 95"
-$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-$dt = new-object System.Data.DataTable
-$da.fill($dt) | out-null
-#$cn.Close()
-Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
-}    
-catch 
-	{ 
-        $ex = $_.Exception 
-	write-log -Message "$ex.Message on $Svr While collecting Wait Stats "   -Path $errorPath 
-	} finally{
-   		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+	if ($logPath -notmatch '.+?\\$') { $logPath += '\' } 
+	$logPath = $logPath + $logFileName
+	$ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
+	write-log -Message "Script Started at $(get-date)"  -Clobber -Path $logPath
+
+	$cn = new-object system.data.sqlclient.sqlconnection(“server=$InstanceName;database=$DatabaseName;Integrated Security=true;”);
+	$cn.Open()
+	$cmd = $cn.CreateCommand()
+	if ($runLocally -eq "true")
+	{
+		$query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline='True' and ServerName = '$env:computername';"
 	}
+	else
+	{
+		$query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline='True';"
+	}
+	$cmd.CommandText = $query
+	$reader = $cmd.ExecuteReader()
+	while($reader.Read()) 
+	{
+		$server = $reader['ServerName']
+		$instance = $reader['InstanceName']    	
+		if ($instance -match "\\") {$SQLServerConnection = $instance} else {$SQLServerConnection = $server + "\" +  $instance}	
+		$res = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
+		$responds = $false            
+		if ($res.ProcessID -ne $null) 
+		{
+			$responds = $true
+			$res.Disconnect()
+		}
+
+		If ($responds) 
+		{
+			# Calling funtion and passing server and instance parameters
+			GetServerListInfo $server $instance 
+		}
+		else 
+		{
+ 			# Let the user know we couldn't connect to the server
+			write-log -Message "$server Server did not respond" -Path $logPath
+		}  
+	}
+	write-log -Message "Script Ended at $(get-date)"  -Path $logPath
+	write-log -Message "Total Elapsed Time: $($ElapsedTime.Elapsed.ToString())"  -Path $logPath
 }
+catch
+{
+	$ex = $_.Exception 
+	write-log -Message "$ex.Message on $svr excuting script baselinestats.ps1" -Level Error -Path $logPath 
+}
+#Execute Script
 ######################################################################################################################################
-
-$cn = new-object system.data.sqlclient.sqlconnection(“server=$SQLInst;database=$CentralDB;Integrated Security=true;”);
-$cn.Open()
-$cmd = $cn.CreateCommand()
-if ($runLocally -eq "true")
-{
-    $query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline='True' and ServerName = '$env:computername';"
-}
-else
-{
-    $query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Baseline='True';"
-}
-$cmd.CommandText = $query
-#$null = $cmd.ExecuteNonQuery()
-$reader = $cmd.ExecuteReader()
-while($reader.Read()) {
- 
-	# Get ServerName and InstanceName from CentralDB
-	$server = $reader['ServerName']
-	$instance = $reader['InstanceName']
- 
-    if ($runLocally -eq "true")
-    {
-        $result = gwmi -query "select StatusCode from Win32_PingStatus where Address = '$server'"
-        $responds = $false
-        if ($result.statuscode -eq 0) 
-        {
-            $responds = $true
-        }
-    }
-    else
-    {
-        $responds = $true
-    }
-
-    If ($responds) 
-    {
-        # Calling funtion and passing server and instance parameters
-	    GetServerListInfo $server $instance
- 
-    }
-    else 
-    {
-        # Let the user know we couldn't connect to the server
-	    write-log -Message "$server Server did not respond"  -Path $errorPath
-    }
- 
-}
-write-log -Message "Script Ended at $(get-date)"  -Path $errorPath
-write-log -Message "Total Elapsed Time: $($ElapsedTime.Elapsed.ToString())"  -Path $errorPath
