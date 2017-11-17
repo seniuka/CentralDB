@@ -12,7 +12,7 @@
 param(
 	[string]$InstanceName="",
 	[string]$DatabaseName="",
-    [string]$runLocally="false", #This flag is used to reduce the number of remote powershell calls from a single cms
+        [string]$runLocally="false", #This flag is used to reduce the number of remote powershell calls from a single cms
 	[string]$logPath="",
 	[string]$logFileName="Check-SQLRURunning_" + $env:computername + ".log",
 	[string]$SmtpServer="",
