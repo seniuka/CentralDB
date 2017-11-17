@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RptDataSource xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" Name="SQLInventoryReports">
+  <ConnectionProperties>
+    <Extension>SQL</Extension>
+    <ConnectString />
+    <IntegratedSecurity>true</IntegratedSecurity>
+  </ConnectionProperties>
+  <DataSourceID>b78d7efe-2d46-4a79-9301-e85f2410fce2</DataSourceID>
+</RptDataSource>

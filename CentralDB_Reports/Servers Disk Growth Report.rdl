@@ -1,0 +1,620 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <AutoRefresh>0</AutoRefresh>
+  <DataSources>
+    <DataSource Name="CentralDB">
+      <DataSourceReference>/SQLInventoryReports/SQLInventoryReports</DataSourceReference>
+      <rd:SecurityType>Integrated</rd:SecurityType>
+      <rd:DataSourceID>48635b9b-c8d2-44bd-815c-2fdd9b7930ea</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="ServerName">
+      <Query>
+        <DataSourceName>CentralDB</DataSourceName>
+        <CommandText>SELECT DISTINCT ServerName
+FROM     Svr.DiskInfo
+Order by ServerName</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="ServerName">
+          <DataField>ServerName</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+      </Fields>
+    </DataSet>
+    <DataSet Name="DskGrwth">
+      <Query>
+        <DataSourceName>CentralDB</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@ServerName">
+            <Value>=Parameters!ServerName.Value</Value>
+          </QueryParameter>
+          <QueryParameter Name="@StartDate">
+            <Value>=Parameters!StartDate.Value</Value>
+          </QueryParameter>
+          <QueryParameter Name="@EndDate">
+            <Value>=Parameters!EndDate.Value</Value>
+          </QueryParameter>
+        </QueryParameters>
+        <CommandType>StoredProcedure</CommandType>
+        <CommandText>usp_DiskGrwth</CommandText>
+      </Query>
+      <Fields>
+        <Field Name="ServerName">
+          <DataField>ServerName</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="DiskName">
+          <DataField>DiskName</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="TotalSizeInGB">
+          <DataField>TotalSizeInGB</DataField>
+          <rd:TypeName>System.Decimal</rd:TypeName>
+        </Field>
+        <Field Name="DateAdded">
+          <DataField>DateAdded</DataField>
+          <rd:TypeName>System.DateTime</rd:TypeName>
+        </Field>
+        <Field Name="UsedSpaceInGB">
+          <DataField>UsedSpaceInGB</DataField>
+          <rd:TypeName>System.Decimal</rd:TypeName>
+        </Field>
+      </Fields>
+    </DataSet>
+  </DataSets>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Textbox Name="Textbox42">
+            <CanGrow>true</CanGrow>
+            <KeepTogether>true</KeepTogether>
+            <Paragraphs>
+              <Paragraph>
+                <TextRuns>
+                  <TextRun>
+                    <Value>="Disk Growth (" &amp; Format(Parameters!StartDate.Value, "MM/dd/yyyy") &amp; " - " &amp; Format(Parameters!EndDate.Value, "MM/dd/yyyy") &amp; ")"</Value>
+                    <Style>
+                      <FontWeight>Bold</FontWeight>
+                    </Style>
+                  </TextRun>
+                </TextRuns>
+                <Style>
+                  <TextAlign>Center</TextAlign>
+                </Style>
+              </Paragraph>
+            </Paragraphs>
+            <rd:DefaultName>Textbox9</rd:DefaultName>
+            <Top>0.48369in</Top>
+            <Left>0.0966in</Left>
+            <Height>0.2in</Height>
+            <Width>6.30679in</Width>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+              <BackgroundColor>LightSeaGreen</BackgroundColor>
+              <PaddingLeft>2pt</PaddingLeft>
+              <PaddingRight>2pt</PaddingRight>
+              <PaddingTop>2pt</PaddingTop>
+              <PaddingBottom>2pt</PaddingBottom>
+            </Style>
+          </Textbox>
+          <Tablix Name="Tablix9">
+            <TablixBody>
+              <TablixColumns>
+                <TablixColumn>
+                  <Width>6.35in</Width>
+                </TablixColumn>
+              </TablixColumns>
+              <TablixRows>
+                <TablixRow>
+                  <Height>2.65833in</Height>
+                  <TablixCells>
+                    <TablixCell>
+                      <CellContents>
+                        <Rectangle Name="Rectangle10">
+                          <ReportItems>
+                            <Rectangle Name="Rectangle11">
+                              <ReportItems>
+                                <Chart Name="Chart1">
+                                  <ChartCategoryHierarchy>
+                                    <ChartMembers>
+                                      <ChartMember>
+                                        <Group Name="Chart1_CategoryGroup">
+                                          <GroupExpressions>
+                                            <GroupExpression>=Fields!DateAdded.Value</GroupExpression>
+                                          </GroupExpressions>
+                                        </Group>
+                                        <SortExpressions>
+                                          <SortExpression>
+                                            <Value>=Fields!DateAdded.Value</Value>
+                                          </SortExpression>
+                                        </SortExpressions>
+                                        <Label>=Fields!DateAdded.Value</Label>
+                                      </ChartMember>
+                                    </ChartMembers>
+                                  </ChartCategoryHierarchy>
+                                  <ChartSeriesHierarchy>
+                                    <ChartMembers>
+                                      <ChartMember>
+                                        <Label>Total Size In GB</Label>
+                                      </ChartMember>
+                                      <ChartMember>
+                                        <Label>Used Space In GB</Label>
+                                      </ChartMember>
+                                    </ChartMembers>
+                                  </ChartSeriesHierarchy>
+                                  <ChartData>
+                                    <ChartSeriesCollection>
+                                      <ChartSeries Name="TotalSizeInGB">
+                                        <ChartDataPoints>
+                                          <ChartDataPoint>
+                                            <ChartDataPointValues>
+                                              <Y>=Sum(Fields!TotalSizeInGB.Value)</Y>
+                                            </ChartDataPointValues>
+                                            <ChartDataLabel>
+                                              <Style />
+                                            </ChartDataLabel>
+                                            <ToolTip>=Sum(Fields!TotalSizeInGB.Value)</ToolTip>
+                                            <Style>
+                                              <Border>
+                                                <Width>1.5pt</Width>
+                                              </Border>
+                                            </Style>
+                                            <ChartMarker>
+                                              <Style />
+                                            </ChartMarker>
+                                            <DataElementOutput>Output</DataElementOutput>
+                                          </ChartDataPoint>
+                                        </ChartDataPoints>
+                                        <Type>Line</Type>
+                                        <Subtype>Smooth</Subtype>
+                                        <Style />
+                                        <ChartEmptyPoints>
+                                          <Style />
+                                          <ChartMarker>
+                                            <Style />
+                                          </ChartMarker>
+                                          <ChartDataLabel>
+                                            <Style />
+                                          </ChartDataLabel>
+                                        </ChartEmptyPoints>
+                                        <ValueAxisName>Primary</ValueAxisName>
+                                        <CategoryAxisName>Primary</CategoryAxisName>
+                                        <ChartSmartLabel>
+                                          <CalloutLineColor>Black</CalloutLineColor>
+                                          <MinMovingDistance>0pt</MinMovingDistance>
+                                        </ChartSmartLabel>
+                                      </ChartSeries>
+                                      <ChartSeries Name="UsedSpaceInGB">
+                                        <ChartDataPoints>
+                                          <ChartDataPoint>
+                                            <ChartDataPointValues>
+                                              <Y>=Sum(Fields!UsedSpaceInGB.Value)</Y>
+                                            </ChartDataPointValues>
+                                            <ChartDataLabel>
+                                              <Style />
+                                            </ChartDataLabel>
+                                            <ToolTip>=Sum(Fields!UsedSpaceInGB.Value)</ToolTip>
+                                            <Style>
+                                              <Border>
+                                                <Width>1.5pt</Width>
+                                              </Border>
+                                            </Style>
+                                            <ChartMarker>
+                                              <Style />
+                                            </ChartMarker>
+                                            <DataElementOutput>Output</DataElementOutput>
+                                          </ChartDataPoint>
+                                        </ChartDataPoints>
+                                        <Type>Line</Type>
+                                        <Subtype>Smooth</Subtype>
+                                        <Style />
+                                        <ChartEmptyPoints>
+                                          <Style />
+                                          <ChartMarker>
+                                            <Style />
+                                          </ChartMarker>
+                                          <ChartDataLabel>
+                                            <Style />
+                                          </ChartDataLabel>
+                                        </ChartEmptyPoints>
+                                        <ValueAxisName>Primary</ValueAxisName>
+                                        <CategoryAxisName>Primary</CategoryAxisName>
+                                        <ChartSmartLabel>
+                                          <CalloutLineColor>Black</CalloutLineColor>
+                                          <MinMovingDistance>0pt</MinMovingDistance>
+                                        </ChartSmartLabel>
+                                      </ChartSeries>
+                                    </ChartSeriesCollection>
+                                  </ChartData>
+                                  <ChartAreas>
+                                    <ChartArea Name="Default">
+                                      <ChartCategoryAxes>
+                                        <ChartAxis Name="Primary">
+                                          <Style>
+                                            <FontSize>8pt</FontSize>
+                                          </Style>
+                                          <ChartAxisTitle>
+                                            <Caption />
+                                            <Style>
+                                              <FontSize>8pt</FontSize>
+                                            </Style>
+                                          </ChartAxisTitle>
+                                          <ChartMajorGridLines>
+                                            <Enabled>False</Enabled>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                              </Border>
+                                            </Style>
+                                          </ChartMajorGridLines>
+                                          <ChartMinorGridLines>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                                <Style>Dotted</Style>
+                                              </Border>
+                                            </Style>
+                                          </ChartMinorGridLines>
+                                          <ChartMinorTickMarks>
+                                            <Length>0.5</Length>
+                                          </ChartMinorTickMarks>
+                                          <CrossAt>NaN</CrossAt>
+                                          <Minimum>NaN</Minimum>
+                                          <Maximum>NaN</Maximum>
+                                          <ChartAxisScaleBreak>
+                                            <Style />
+                                          </ChartAxisScaleBreak>
+                                        </ChartAxis>
+                                        <ChartAxis Name="Secondary">
+                                          <Style>
+                                            <FontSize>8pt</FontSize>
+                                          </Style>
+                                          <ChartAxisTitle>
+                                            <Caption>Axis Title</Caption>
+                                            <Style>
+                                              <FontSize>8pt</FontSize>
+                                            </Style>
+                                          </ChartAxisTitle>
+                                          <ChartMajorGridLines>
+                                            <Enabled>False</Enabled>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                              </Border>
+                                            </Style>
+                                          </ChartMajorGridLines>
+                                          <ChartMinorGridLines>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                                <Style>Dotted</Style>
+                                              </Border>
+                                            </Style>
+                                          </ChartMinorGridLines>
+                                          <ChartMinorTickMarks>
+                                            <Length>0.5</Length>
+                                          </ChartMinorTickMarks>
+                                          <CrossAt>NaN</CrossAt>
+                                          <Location>Opposite</Location>
+                                          <Minimum>NaN</Minimum>
+                                          <Maximum>NaN</Maximum>
+                                          <ChartAxisScaleBreak>
+                                            <Style />
+                                          </ChartAxisScaleBreak>
+                                        </ChartAxis>
+                                      </ChartCategoryAxes>
+                                      <ChartValueAxes>
+                                        <ChartAxis Name="Primary">
+                                          <Style>
+                                            <FontSize>8pt</FontSize>
+                                          </Style>
+                                          <ChartAxisTitle>
+                                            <Caption />
+                                            <Style>
+                                              <FontSize>8pt</FontSize>
+                                            </Style>
+                                          </ChartAxisTitle>
+                                          <ChartMajorGridLines>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                              </Border>
+                                            </Style>
+                                          </ChartMajorGridLines>
+                                          <ChartMinorGridLines>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                                <Style>Dotted</Style>
+                                              </Border>
+                                            </Style>
+                                          </ChartMinorGridLines>
+                                          <ChartMinorTickMarks>
+                                            <Length>0.5</Length>
+                                          </ChartMinorTickMarks>
+                                          <CrossAt>NaN</CrossAt>
+                                          <Minimum>NaN</Minimum>
+                                          <Maximum>NaN</Maximum>
+                                          <ChartAxisScaleBreak>
+                                            <Style />
+                                          </ChartAxisScaleBreak>
+                                        </ChartAxis>
+                                        <ChartAxis Name="Secondary">
+                                          <Style>
+                                            <FontSize>8pt</FontSize>
+                                          </Style>
+                                          <ChartAxisTitle>
+                                            <Caption>Axis Title</Caption>
+                                            <Style>
+                                              <FontSize>8pt</FontSize>
+                                            </Style>
+                                          </ChartAxisTitle>
+                                          <ChartMajorGridLines>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                              </Border>
+                                            </Style>
+                                          </ChartMajorGridLines>
+                                          <ChartMinorGridLines>
+                                            <Style>
+                                              <Border>
+                                                <Color>Gainsboro</Color>
+                                                <Style>Dotted</Style>
+                                              </Border>
+                                            </Style>
+                                          </ChartMinorGridLines>
+                                          <ChartMinorTickMarks>
+                                            <Length>0.5</Length>
+                                          </ChartMinorTickMarks>
+                                          <CrossAt>NaN</CrossAt>
+                                          <Location>Opposite</Location>
+                                          <Minimum>NaN</Minimum>
+                                          <Maximum>NaN</Maximum>
+                                          <ChartAxisScaleBreak>
+                                            <Style />
+                                          </ChartAxisScaleBreak>
+                                        </ChartAxis>
+                                      </ChartValueAxes>
+                                      <Style>
+                                        <Border>
+                                          <Color>DimGray</Color>
+                                        </Border>
+                                        <BackgroundGradientType>None</BackgroundGradientType>
+                                      </Style>
+                                    </ChartArea>
+                                  </ChartAreas>
+                                  <ChartLegends>
+                                    <ChartLegend Name="Legend1">
+                                      <Style>
+                                        <BackgroundGradientType>None</BackgroundGradientType>
+                                        <FontSize>8pt</FontSize>
+                                      </Style>
+                                      <Position>BottomCenter</Position>
+                                      <DockOutsideChartArea>true</DockOutsideChartArea>
+                                      <ChartLegendTitle>
+                                        <Caption />
+                                        <Style>
+                                          <FontSize>8pt</FontSize>
+                                          <FontWeight>Bold</FontWeight>
+                                          <TextAlign>Center</TextAlign>
+                                        </Style>
+                                      </ChartLegendTitle>
+                                      <HeaderSeparatorColor>Black</HeaderSeparatorColor>
+                                      <ColumnSeparatorColor>Black</ColumnSeparatorColor>
+                                    </ChartLegend>
+                                  </ChartLegends>
+                                  <ChartTitles>
+                                    <ChartTitle Name="Title1">
+                                      <Caption>= Fields!DiskName.Value &amp; " Drive"</Caption>
+                                      <Style>
+                                        <BackgroundGradientType>None</BackgroundGradientType>
+                                        <TextAlign>General</TextAlign>
+                                        <VerticalAlign>Top</VerticalAlign>
+                                      </Style>
+                                    </ChartTitle>
+                                  </ChartTitles>
+                                  <Palette>PacificLight</Palette>
+                                  <ChartBorderSkin>
+                                    <Style>
+                                      <BackgroundColor>Gray</BackgroundColor>
+                                      <BackgroundGradientType>None</BackgroundGradientType>
+                                      <Color>White</Color>
+                                    </Style>
+                                  </ChartBorderSkin>
+                                  <ChartNoDataMessage Name="NoDataMessage">
+                                    <Caption>No Data Available</Caption>
+                                    <Style>
+                                      <BackgroundGradientType>None</BackgroundGradientType>
+                                      <TextAlign>General</TextAlign>
+                                      <VerticalAlign>Top</VerticalAlign>
+                                    </Style>
+                                  </ChartNoDataMessage>
+                                  <DataSetName>DskGrwth</DataSetName>
+                                  <Top>0.035in</Top>
+                                  <Left>0.05in</Left>
+                                  <Height>2.5in</Height>
+                                  <Width>6.25in</Width>
+                                  <Style>
+                                    <Border>
+                                      <Style>None</Style>
+                                    </Border>
+                                    <BackgroundColor>LightSeaGreen</BackgroundColor>
+                                    <BackgroundGradientType>None</BackgroundGradientType>
+                                  </Style>
+                                </Chart>
+                              </ReportItems>
+                              <KeepTogether>true</KeepTogether>
+                              <Height>2.65833in</Height>
+                              <Width>6.35in</Width>
+                              <Style>
+                                <Border>
+                                  <Style>None</Style>
+                                </Border>
+                              </Style>
+                            </Rectangle>
+                          </ReportItems>
+                          <KeepTogether>true</KeepTogether>
+                          <Style>
+                            <Border>
+                              <Style>None</Style>
+                            </Border>
+                          </Style>
+                        </Rectangle>
+                      </CellContents>
+                    </TablixCell>
+                  </TablixCells>
+                </TablixRow>
+              </TablixRows>
+            </TablixBody>
+            <TablixColumnHierarchy>
+              <TablixMembers>
+                <TablixMember />
+              </TablixMembers>
+            </TablixColumnHierarchy>
+            <TablixRowHierarchy>
+              <TablixMembers>
+                <TablixMember>
+                  <Group Name="Details1">
+                    <GroupExpressions>
+                      <GroupExpression>=Fields!DiskName.Value</GroupExpression>
+                    </GroupExpressions>
+                  </Group>
+                </TablixMember>
+              </TablixMembers>
+            </TablixRowHierarchy>
+            <DataSetName>DskGrwth</DataSetName>
+            <Top>0.79667in</Top>
+            <Left>0.0966in</Left>
+            <Height>2.65833in</Height>
+            <Width>6.35in</Width>
+            <ZIndex>1</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+            </Style>
+          </Tablix>
+          <Textbox Name="Textbox2">
+            <CanGrow>true</CanGrow>
+            <KeepTogether>true</KeepTogether>
+            <Paragraphs>
+              <Paragraph>
+                <TextRuns>
+                  <TextRun>
+                    <Value>=First(Fields!ServerName.Value, "DskGrwth")</Value>
+                    <Style>
+                      <FontSize>11pt</FontSize>
+                      <FontWeight>Bold</FontWeight>
+                    </Style>
+                  </TextRun>
+                </TextRuns>
+                <Style />
+              </Paragraph>
+            </Paragraphs>
+            <rd:DefaultName>Textbox2</rd:DefaultName>
+            <Top>0.08208in</Top>
+            <Left>0.0966in</Left>
+            <Height>0.26042in</Height>
+            <Width>6.30679in</Width>
+            <ZIndex>2</ZIndex>
+            <Style>
+              <Border>
+                <Style>None</Style>
+              </Border>
+              <BackgroundColor>LightSeaGreen</BackgroundColor>
+              <VerticalAlign>Middle</VerticalAlign>
+              <PaddingLeft>2pt</PaddingLeft>
+              <PaddingRight>2pt</PaddingRight>
+              <PaddingTop>2pt</PaddingTop>
+              <PaddingBottom>2pt</PaddingBottom>
+            </Style>
+          </Textbox>
+        </ReportItems>
+        <Height>3.53222in</Height>
+        <Style>
+          <Border>
+            <Style>None</Style>
+            <Width>2pt</Width>
+          </Border>
+        </Style>
+      </Body>
+      <Width>6.5in</Width>
+      <Page>
+        <LeftMargin>1in</LeftMargin>
+        <RightMargin>1in</RightMargin>
+        <TopMargin>1in</TopMargin>
+        <BottomMargin>1in</BottomMargin>
+        <Style />
+      </Page>
+    </ReportSection>
+  </ReportSections>
+  <ReportParameters>
+    <ReportParameter Name="ServerName">
+      <DataType>String</DataType>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>ServerName</DataSetName>
+          <ValueField>ServerName</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+      <Prompt>Server Name</Prompt>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>ServerName</DataSetName>
+          <ValueField>ServerName</ValueField>
+          <LabelField>ServerName</LabelField>
+        </DataSetReference>
+      </ValidValues>
+    </ReportParameter>
+    <ReportParameter Name="StartDate">
+      <DataType>DateTime</DataType>
+      <DefaultValue>
+        <Values>
+          <Value>=DateAdd(DateInterval.Day, -30,Today)</Value>
+        </Values>
+      </DefaultValue>
+      <Prompt>Start Date</Prompt>
+    </ReportParameter>
+    <ReportParameter Name="EndDate">
+      <DataType>DateTime</DataType>
+      <DefaultValue>
+        <Values>
+          <Value>=DateAdd(DateInterval.Day,0,Today)</Value>
+        </Values>
+      </DefaultValue>
+      <Prompt>End Date</Prompt>
+    </ReportParameter>
+  </ReportParameters>
+  <ReportParametersLayout>
+    <GridLayoutDefinition>
+      <NumberOfColumns>2</NumberOfColumns>
+      <NumberOfRows>2</NumberOfRows>
+      <CellDefinitions>
+        <CellDefinition>
+          <ColumnIndex>0</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>ServerName</ParameterName>
+        </CellDefinition>
+        <CellDefinition>
+          <ColumnIndex>1</ColumnIndex>
+          <RowIndex>0</RowIndex>
+          <ParameterName>StartDate</ParameterName>
+        </CellDefinition>
+        <CellDefinition>
+          <ColumnIndex>0</ColumnIndex>
+          <RowIndex>1</RowIndex>
+          <ParameterName>EndDate</ParameterName>
+        </CellDefinition>
+      </CellDefinitions>
+    </GridLayoutDefinition>
+  </ReportParametersLayout>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportServerUrl>ReportServerURL</rd:ReportServerUrl>
+  <rd:ReportID>86f40ee2-1e4a-4ac0-9613-59db3d0b0b3c</rd:ReportID>
+</Report>
