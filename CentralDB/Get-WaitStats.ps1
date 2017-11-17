@@ -3,7 +3,7 @@
 # This script will collect waitstats from the following system views.
 # Missing Indexes: dm_db_missing_index_groups, dm_db_missing_index_group_stats, dm_db_missing_index_details
 # Instance Wait Stats: dm_os_wait_stats
-#															This script has been branched from https://github.com/CrazyDBA/CentralDB
+#                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -11,7 +11,7 @@
 param(
 	[string]$InstanceName="",
 	[string]$DatabaseName="",
-    [string]$runLocally="false",  #This flag is used to reduce the number of remote powershell calls from a single central management server.
+        [string]$runLocally="false",  #This flag is used to reduce the number of remote powershell calls from a single cms.
 	[string]$logPath="",
 	[string]$logFileName="Get-WaitStats_" + $env:computername + ".log"
 	)
