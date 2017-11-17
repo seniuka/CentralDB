@@ -1,16 +1,19 @@
-###################################################################################################################################
-<# Based on Allen White, Collen Morrow, Erin Stellato's and Jonathan Kehayias Scripts for SQL Inventory and Baselining
-https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
-http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
-http://www.sqlservercentral.com/articles/baselines/94657/ 
-https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/#>
-###################################################################################################################################
+#####################################################################################################################################
+# Get-WaitStats (https://seniuka.github.io/CentralDB/)
+# This script will collect waitstats from the following system views.
+# Missing Indexes: dm_db_missing_index_groups, dm_db_missing_index_group_stats, dm_db_missing_index_details
+# Instance Wait Stats: dm_os_wait_stats
+#															This script has been branched from https://github.com/CrazyDBA/CentralDB
+#####################################################################################################################################
+
+#####################################################################################################################################
+#Parameter List
 param(
 	[string]$InstanceName="",
 	[string]$DatabaseName="",
-    [string]$runLocally="false",
+    [string]$runLocally="false",  #This flag is used to reduce the number of remote powershell calls from a single central management server.
 	[string]$logPath="",
-	[string]$logFileName="WaitStats_" + $env:computername + ".log"
+	[string]$logFileName="Get-WaitStats_" + $env:computername + ".log"
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -465,3 +468,11 @@ catch
 }
 #Execute Script
 ######################################################################################################################################
+
+###################################################################################################################################
+<# Based on Allen White, Collen Morrow, Erin Stellato's and Jonathan Kehayias Scripts for SQL Inventory and Baselining
+https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
+http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
+http://www.sqlservercentral.com/articles/baselines/94657/ 
+https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/#>
+###################################################################################################################################

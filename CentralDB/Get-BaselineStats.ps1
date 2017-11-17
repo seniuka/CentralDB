@@ -1,18 +1,22 @@
-############################################################################################################################################################
-<# CrazyDBA.COM (CentralDB) - Based on Allen White, Colleen Morrow, Erin Stellato, Jonathan Kehayias and Ed Wilsons Scripts for SQL Inventory and Baselining
-https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
-http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
-http://www.sqlservercentral.com/articles/baselines/94657/ 
-https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/
-http://blogs.technet.com/b/heyscriptingguy/archive/2011/07/28/use-performance-counter-sets-and-powershell-to-ease-baselining.aspx
-http://www.youtube.com/watch?v=Y8IbadEHoPg #>
-############################################################################################################################################################
+#####################################################################################################################################
+# Get-BaselineStats (https://seniuka.github.io/CentralDB/)
+# This script will collect baseline stats from the following system views.
+# OS Performance Counters: dm_os_performance_counters
+# Server OS PerfMon Counters: 	Processor(_total)\% Processor Time, System\Processor Queue Length', PhysicalDisk(_total)\Avg. Disk sec/Read', 
+#								PhysicalDisk(_total)\Avg. Disk sec/Write, PhysicalDisk(_total)\Avg. Disk Queue Length, Memory\Available MBytes, 
+#								Paging File(_total)\% Usage
+#
+#															This script has been branched from https://github.com/CrazyDBA/CentralDB
+#####################################################################################################################################
+
+#####################################################################################################################################
+#Parameter List
 param(
 	[string]$InstanceName="",
 	[string]$DatabaseName="",
-    [string]$runLocally="false",
+    [string]$runLocally="false", #This flag is used to reduce the number of remote powershell calls from a single central management server.
 	[string]$logPath="",
-	[string]$logFileName="BaselineStats_" + $env:computername + ".log"
+	[string]$logFileName="Get-BaselineStats_" + $env:computername + ".log"
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -603,3 +607,13 @@ catch
 }
 #Execute Script
 ######################################################################################################################################
+
+############################################################################################################################################################
+<# CrazyDBA.COM (CentralDB) - Based on Allen White, Colleen Morrow, Erin Stellato, Jonathan Kehayias and Ed Wilsons Scripts for SQL Inventory and Baselining
+https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
+http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
+http://www.sqlservercentral.com/articles/baselines/94657/ 
+https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/
+http://blogs.technet.com/b/heyscriptingguy/archive/2011/07/28/use-performance-counter-sets-and-powershell-to-ease-baselining.aspx
+http://www.youtube.com/watch?v=Y8IbadEHoPg #>
+############################################################################################################################################################
