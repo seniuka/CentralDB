@@ -1,15 +1,26 @@
-###################################################################################################################################
-<# Based on Allen White, Colleen Morrow and Erin Stellato's Scripts for SQL Inventory and Baselining
-https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
-http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
-http://www.sqlservercentral.com/articles/baselines/94657/ #>
-###################################################################################################################################
+#####################################################################################################################################
+# Get-Inventory (https://seniuka.github.io/CentralDB/)
+# This script will collect SQL server inventory details.
+# Operating System Info: 
+# Page File Usage Info: 
+# Server Info: 
+# Disk and MountPoint Info:
+# SQL Services Info:
+# SQL Server DB Engine Info: 
+# Reporting Services Info: 
+# Analysis Services Info: 
+#
+#                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
+#####################################################################################################################################
+
+#####################################################################################################################################
+#Parameter List
 param(
 	[string]$InstanceName="",
 	[string]$DatabaseName="",
     [string]$runLocally="false",
 	[string]$logPath="",
-	[string]$logFileName="CentralInventory_" + $env:computername + ".log"
+	[string]$logFileName="Get-Inventory_" + $env:computername + ".log"
 )
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -1419,9 +1430,9 @@ ConvertFrom-StringData -StringData @’
 	{
 		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
-
+	#############################################################################################################################
 } 
-#####################################################################################################################################
+######################################################################################################################################
 
 ######################################################################################################################################
 #Execute Script
@@ -1486,6 +1497,13 @@ try
 catch
 {
 	$ex = $_.Exception 
-	write-log -Message "$ex.Message on $svr excuting script baselinestats.ps1" -Level Error -Path $logPath 
+	write-log -Message "$ex.Message on $svr excuting script Get-Inventory.ps1" -Level Error -Path $logPath 
 }
 ######################################################################################################################################
+
+###################################################################################################################################
+<# Based on Allen White, Colleen Morrow and Erin Stellato's Scripts for SQL Inventory and Baselining
+https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
+http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
+http://www.sqlservercentral.com/articles/baselines/94657/ #>
+###################################################################################################################################

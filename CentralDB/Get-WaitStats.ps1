@@ -464,7 +464,7 @@ try
 catch
 {
 	$ex = $_.Exception 
-	write-log -Message "$ex.Message on $svr excuting script baselinestats.ps1" -Level Error -Path $logPath 
+	write-log -Message "$ex.Message on $svr excuting script Get-WaitStats.ps1" -Level Error -Path $logPath 
 }
 #Execute Script
 ######################################################################################################################################

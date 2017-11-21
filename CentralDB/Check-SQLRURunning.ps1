@@ -85,7 +85,7 @@ try
 catch
 {
 	$ex = $_.Exception 
-	write-log -Message "$ex.Message on $svr excuting script Check-SQLRURunning" -Level Error -Path $logPath 
+	write-log -Message "$ex.Message on $svr excuting script Check-SQLRURunning.ps1" -Level Error -Path $logPath 
 }
 #Execute Script
 #####################################################################################################################################
