@@ -31,6 +31,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Get-BaselineStats.ps1" />
+    <Compile Include="Get-FirstResponderKit.ps1" />
     <Compile Include="Get-Inventory.ps1" />
     <Compile Include="Check-SQLRURunning.ps1" />
     <Compile Include="Get-WaitStats.ps1" />

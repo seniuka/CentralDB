@@ -1,22 +1,29 @@
 #####################################################################################################################################
-# Get-BaselineStats (https://seniuka.github.io/CentralDB/)
-# This script will collect baseline stats from the following system views.
-# OS Performance Counters: dm_os_performance_counters
-# Server OS PerfMon Counters: Processor(_total)\% Processor Time, System\Processor Queue Length', PhysicalDisk(_total)\Avg. Disk sec/Read', 
-#                             PhysicalDisk(_total)\Avg. Disk sec/Write, PhysicalDisk(_total)\Avg. Disk Queue Length, Memory\Available MBytes, 
-#                             Paging File(_total)\% Usage
+# Get-FirstResponderKit (https://seniuka.github.io/CentralDB/)
+# This script will collect data points from the following FirstResponderKit scripts.
+# ScriptName		 Type - Description of check
+# sp_Blitz:           BLZ - This script checks the health of your SQL Server and gives you a prioritized to-do list of the most urgent things you should consider fixing.
+# sp_BlitzBackups:    BLB - This script checks your backups to see how much data you might lose when this server fails, and how long it might take to recover.
+# sp_BlitzCache:      BZC - This script displays your most resource-intensive queries from the plan cache, and points to ways you can tune these queries to make them faster.
+# sp_BlitzFirst:      BZF - This script gives you a prioritized list of why your SQL Server is slow right now.
+# sp_BlitzIndex:      BZI - This script analyzes the design and performance of your indexes.
+# sp_BlitzQueryStore: BQS - This script displays your most resource-intensive queries from the Query Store, and points to ways you can tune these queries to make them faster.
+# sp_BlitzWho:        BZW - This script gives you a snapshot of everything currently executing on your SQL Server.
 #
-#                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
+#                                                            This script is brand spanking new; this baby could crash your server so hard! 
 #####################################################################################################################################
 
 #####################################################################################################################################
 #Parameter List
 param(
-	[string]$InstanceName="",
-	[string]$DatabaseName="",
+	[string]$InstanceName="", #CMS Server with CentralDB
+	[string]$DatabaseName="", #CMS Server with CentralDB
     [string]$runLocally="false", #This flag is used to reduce the number of remote powershell calls from a single cms
+	[string]$type="", #3 Letters from the following sp_Blitz:BLZ, sp_BlitzBackups:BLB, sp_BlitzCache:BZC, p_BlitzFirst:BZF, sp_BlitzIndex:BZI, sp_BlitzQueryStore:BQS, sp_BlitzWho:BZW
+	[string]$FirstResponderKitPath="", #Where does FirstResponderKit live... the sql files? So we can load the newest version.
+	[string]$FirstResponderKitFilter="Install-Core-Blitz-No-Query-Store.sql", #If you rename them... what are they named by default they are sp_Blitz*.sql...
 	[string]$logPath="",
-	[string]$logFileName="Get-BaselineStats_" + $env:computername + ".log"
+	[string]$logFileName="Get-FirstResponderKit_" + $env:computername + ".log"
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -248,8 +255,8 @@ function Write-Log
                     Param(
                             [Parameter(ValueFromPipeline=$true,Mandatory=$true)] [ValidateNotNullOrEmpty()]
                             [string] $Message,
-                            [Parameter()] [ValidateSet(‚ÄúError‚Äù, ‚ÄúWarn‚Äù, ‚ÄúInfo‚Äù)]
-                            [string] $Level = ‚ÄúInfo‚Äù,
+                            [Parameter()] [ValidateSet(ìErrorî, ìWarnî, ìInfoî)]
+                            [string] $Level = ìInfoî,
                             [Parameter()]
                             [Switch] $NoConsoleOut,
                             [Parameter()]
@@ -257,7 +264,7 @@ function Write-Log
                             [Parameter()] [ValidateRange(1,30)]
                             [Int16] $Indent = 0,     
                             [Parameter()]
-                            [IO.FileInfo] $Path = ‚Äù$env:temp\PowerShellLog.txt‚Äù,                           
+                            [IO.FileInfo] $Path = î$env:temp\PowerShellLog.txtî,                           
                             [Parameter()]
                             [Switch] $Clobber,                          
                             [Parameter()]
@@ -273,7 +280,7 @@ function Write-Log
             Begin {}
             Process {
                     try {                  
-                            $msg = '{0}{1} : {2} : {3}' -f (" " * $Indent), (Get-Date -Format ‚Äúyyyy-MM-dd HH:mm:ss‚Äù), $Level.ToUpper(), $Message                           
+                            $msg = '{0}{1} : {2} : {3}' -f (" " * $Indent), (Get-Date -Format ìyyyy-MM-dd HH:mm:ssî), $Level.ToUpper(), $Message                           
                             if ($NoConsoleOut -eq $false) {
                                     switch ($Level) {
                                             'Error' { Write-Error $Message }
@@ -299,13 +306,13 @@ function Write-Log
                                 $log.set_log($EventLogName)  
                                 $log.set_source($EventSource)                       
                                     switch ($Level) {
-                                            ‚ÄúError‚Äù { $log.WriteEntry($Message, 'Error', $EventID) }
-                                            ‚ÄúWarn‚Äù  { $log.WriteEntry($Message, 'Warning', $EventID) }
-                                            ‚ÄúInfo‚Äù  { $log.WriteEntry($Message, 'Information', $EventID) }
+                                            ìErrorî { $log.WriteEntry($Message, 'Error', $EventID) }
+                                            ìWarnî  { $log.WriteEntry($Message, 'Warning', $EventID) }
+                                            ìInfoî  { $log.WriteEntry($Message, 'Information', $EventID) }
                                     }
                             }
                     } catch {
-                            throw ‚ÄúFailed to create log entry in: ‚Äò$Path‚Äô. The error was: ‚Äò$_‚Äô.‚Äù
+                            throw ìFailed to create log entry in: ë$Pathí. The error was: ë$_í.î
                     }
             }    
             End {}    
@@ -314,13 +321,17 @@ function Write-Log
 #####################################################################################################################################
 
 #####################################################################################################################################
-#GetServerListInfo	[Function to get Server list info]
-function GetServerListInfo($svr, $inst) 
+#Create-FirstResponderKit	[Function to get Server list info]
+function Create-FirstResponderKit($svr, $inst, $type) 
 {
 	# Create an ADO.Net connection to the instance
-	$cn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master");
-	$s = new-object (‚ÄòMicrosoft.SqlServer.Management.Smo.Server‚Äô) $cn
+	$InstanceSQLConn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=tempdb;");
+    $sc = $InstanceSQLConn.CreateCommand()  
+    $s = new-object (ëMicrosoft.SqlServer.Management.Smo.Serverí) $InstanceSQLConn
 	$SQLServerConnection = $inst
+    $InstanceSQLConn.Open()
+    $Command = New-Object System.Data.SQLClient.SQLCommand 
+    $Command.Connection = $InstanceSQLConn 
 
 	### Instance Baseline Stats #####################################################################################################	
 	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
@@ -330,237 +341,253 @@ function GetServerListInfo($svr, $inst)
 	{
 		try
 		{
-			$ErrorActionPreference = "Stop"; #Make all errors terminating
-			$CITbl = ‚Äú[Inst].[InsBaselineStats]‚Äù
-			$query= "DECLARE @CounterPrefix NVARCHAR(30)
-			SET @CounterPrefix = CASE
-				WHEN @@SERVICENAME = 'MSSQLSERVER'
-				THEN 'SQLServer:'
-				ELSE 'MSSQL$'+@@SERVICENAME+':'
-				END;
-			-- Capture the first counter set
-			SELECT CAST(1 AS INT) AS collection_instance ,
-				  [OBJECT_NAME] ,
-				  counter_name ,
-				  instance_name ,
-				  cntr_value ,
-				  cntr_type ,
-				  CURRENT_TIMESTAMP AS collection_time
-			INTO #perf_counters_init
-			FROM sys.dm_os_performance_counters
-			WHERE (( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page life expectancy') 
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Lazy Writes/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page reads/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page writes/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Databases' AND counter_name = 'Log Growths')
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Free list stalls/sec')							 
-				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'User Connections')
-				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Lock Waits/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Number of Deadlocks/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Databases' AND counter_name = 'Transactions/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods' AND counter_name = 'Forwarded Records/sec')  
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods' AND counter_name = 'Index Searches/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods' AND counter_name = 'Full Scans/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'SQL Statistics' AND counter_name = 'Batch Requests/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'SQL Statistics' AND counter_name = 'SQL Compilations/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'SQL Statistics' AND counter_name = 'SQL Re-Compilations/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Latches' AND counter_name = 'Latch Waits/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'Processes Blocked')
-				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Lock Wait Time (ms)')
-				OR ( OBJECT_NAME = @CounterPrefix+'Memory Manager' AND counter_name = 'Memory Grants Pending')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods'AND counter_name = 'Page Splits/sec') ) 
-				AND (instance_name = '' or instance_name = '_Total') 
-			-- Wait on Second between data collection
-			WAITFOR DELAY '00:00:01'
-			-- Capture the second counter set
-			SELECT CAST(2 AS INT) AS collection_instance ,
-				   OBJECT_NAME ,
-				   counter_name ,
-				   instance_name ,
-				   cntr_value ,
-				   cntr_type ,
-				   CURRENT_TIMESTAMP AS collection_time
-			INTO #perf_counters_second
-			FROM sys.dm_os_performance_counters
-			WHERE (( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page life expectancy') 
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Lazy Writes/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page reads/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page writes/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Databases' AND counter_name = 'Log Growths')
-				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Free list stalls/sec')							 
-				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'User Connections')
-				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Lock Waits/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Number of Deadlocks/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Databases' AND counter_name = 'Transactions/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods' AND counter_name = 'Forwarded Records/sec')  
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods' AND counter_name = 'Index Searches/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods' AND counter_name = 'Full Scans/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'SQL Statistics' AND counter_name = 'Batch Requests/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'SQL Statistics' AND counter_name = 'SQL Compilations/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'SQL Statistics' AND counter_name = 'SQL Re-Compilations/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'Latches' AND counter_name = 'Latch Waits/sec')
-				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'Processes Blocked')
-				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Lock Wait Time (ms)')
-				OR ( OBJECT_NAME = @CounterPrefix+'Memory Manager' AND counter_name = 'Memory Grants Pending')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods'AND counter_name = 'Page Splits/sec') ) 
-				AND (instance_name = '' or instance_name = '_Total') 
-			--Jeremiah Nellis
-			select 
-				('$Svr') as ServerName, ('$inst') as InstanceName,  --getdate() as RunDate,
-				[Forwarded Records/sec] as FwdRecSec,
-				[Full Scans/sec] as FlScansSec,
-				[Index Searches/sec] as IdxSrchsSec,
-    				[Page Splits/sec] as PgSpltSec,
-				[Free list stalls/sec] as FreeLstStallsSec,
-				[Lazy writes/sec] as LzyWrtsSec,
-				[Page life expectancy] as PgLifeExp,
-				[Page reads/sec] as PgRdSec,
-				[Page writes/sec] as PgWtSec,
-				[Log Growths] LogGrwths,
-				[Transactions/sec] as TranSec,
-				[Processes blocked] as BlkProcs,
-				[User Connections] as UsrConns,
-				[Latch Waits/sec] as LatchWtsSec,
-				[Lock Wait Time (ms)] as LckWtTime,
-				[Lock Waits/sec] as LckWtsSec,
-				[Number of Deadlocks/sec] as DeadLockSec,
-				[Memory Grants Pending] as MemGrnts,
-				[Batch Requests/sec] as BatReqSec,
-				[SQL Compilations/sec] as SQLCompSec,
-				[SQL Re-Compilations/sec] as SQLReCompSec
-			   -- add your additional counters here
-			From (SELECT  s.counter_name ,
-					CASE WHEN i.cntr_type = 272696576
-					  THEN s.cntr_value - i.cntr_value
-					  WHEN i.cntr_type = 65792 THEN s.cntr_value
-					END AS cntr_value
-			FROM #perf_counters_init AS i
-			  JOIN  #perf_counters_second AS s
-				ON i.collection_instance + 1 = s.collection_instance
-				  AND i.OBJECT_NAME = s.OBJECT_NAME
-				  AND i.counter_name = s.counter_name
-				  AND i.instance_name = s.instance_name) as SourceTable
-			Pivot
-			(
-			Max(cntr_value)
-			For [counter_name] in (
-					[Forwarded Records/sec],
-					[Full Scans/sec],
-					[Index Searches/sec],
-					[Page Splits/sec],
-					[Free list stalls/sec],
-					[Lazy writes/sec],
-					[Page life expectancy],
-					[Page reads/sec],
-					[Page writes/sec],
-					[Log Growths],
-					[Transactions/sec],
-					[Processes blocked],
-					[User Connections],
-					[Latch Waits/sec],
-					[Lock Wait Time (ms)],
-					[Lock Waits/sec],
-					[Number of Deadlocks/sec],
-					[Memory Grants Pending],
-					[Batch Requests/sec],
-					[SQL Compilations/sec],
-					[SQL Re-Compilations/sec]
-					 -- add the same additional counters here
-				) 
-			) as PivotTable
-			-- Cleanup tables
-			DROP TABLE #perf_counters_init
-			DROP TABLE #perf_counters_second"
+            $SQLArray = New-Object System.Collections.ArrayList
+            $i = 0
+            $Path = $FirstResponderKitPath
+            $Filter = $FirstResponderKitFilter   
+            $FirstResponderKitFiles = Get-ChildItem -LiteralPath $Path -Filter $Filter -File
+			Write-Log -Message "### FILE PROCSSING ############################################" -Level Info -Path $logPath
+			foreach($FirstResponderKitFile in $FirstResponderKitFiles)
+			{
+                $SQLCommandText = @(Get-Content -Path $FirstResponderKitFile.FullName) 
+                $message = "### LOADING FILE " + $FirstResponderKitFile.FullName
+				Write-Log -Message $message -Level Info -Path $logPath  
+                $i = 0
+                foreach($SQLString in $SQLCommandText) 
+                { 
+                    if($SQLString.Trim() -ne "GO") 
+                    { 
+                        $i = $i + 1
+                        $SQLPacket += $SQLString.Trim() + "`n"        
+                    } 
+                    else 
+                    {  
+                        if($SQLPacket.Length -gt 0)
+                        {
+                            $message = "### Executing " + $i + " lines." 
+                            Write-Log -Message $message -Level Info -Path $logPath
+                            $Command.CommandText = $SQLPacket 
+                            $Command.ExecuteNonQuery()  | out-null 
+                            $SQLPacket = ""
+                            $SQLString = ""                           
+                        }                       
+                        $i = 0
+                    }                                                 
+                                        
+                    if($SQLPacket.Length -eq 0 -AND $SQLString.Length -ne 0 -AND $SQLString.Trim() -ne "GO")
+                    {
+                        $SQLPacket = $SQLString.Trim() + "`n" 
+                        if($SQLPacket.Length -gt 0)
+                        {
+                            $message = "### Executing ?!?" + $i + " lines." 
+                            Write-Log -Message $message -Level Info -Path $logPath
+                            $Command.CommandText = $SQLPacket 
+                            $Command.ExecuteNonQuery() 
+                            $SQLPacket = ""
+                            $SQLString = ""
+                        }                       
+                        $i = 0
+                    }             
+                } 
+            }
 
-			$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-			$dt = new-object System.Data.DataTable
-			$da.fill($dt) | out-null
-			Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
-			Write-Log -Message "Collecting Instance Baseline Stats" -Level Info -Path $logPath
+            if ($InstanceSQLConn.State -eq "Open"){$InstanceSQLConn.Close()} 
+			Write-Log -Message "Create-FirstResponderKit $type on Instance $inst" -Level Info -Path $logPath
 		} 
 		catch 
 		{ 
 			$ex = $_.Exception 
-		write-log -Message "$ex.Message on $inst While collecting Instance Baseline Stats "   -Path $logPath
+		    write-log -Message "$ex.Message on $inst While Create-FirstResponderKit" -Path $logPath
 		} 
 		finally
 		{
    			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+            $InstanceSQLConn.close | Out-Null
 		}
 	}
 	else 
 	{             
-		write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst"   -Path $logPath
+		write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst" -Path $logPath
 	}
 	#################################################################################################################################
 
-	### Server Baseline Stats ####################################################################################################### 
-	if ((get-counter -ListSet process).MachineName -eq $svr) {$responds = $true}  
+} #Create-FirstResponderKit
+######################################################################################################################################
+
+#####################################################################################################################################
+#Get-FirstResponderKit	[Function to get Server list info]
+function Get-FirstResponderKit($svr, $inst, $type) 
+{
+	# Create an ADO.Net connection to the instance
+	$InstanceSQLConn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=tempdb;");
+    $s = new-object (ëMicrosoft.SqlServer.Management.Smo.Serverí) $InstanceSQLConn
+	$SQLServerConnection = $inst
+    $InstanceSQLConn.Open()
+    $Command = New-Object System.Data.SQLClient.SQLCommand 
+    $Command.Connection = $InstanceSQLConn 
+
+	### Instance Baseline Stats #####################################################################################################	
+	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
+	$responds = $false
+	if ($result.ProcessID -ne $null) {$responds = $true}  
 	If ($responds) 
-	{
-		try
-		{
-			$ErrorActionPreference = "Stop"; #Make all errors terminating
-			$Date= Get-Date -format G
-			$CITbl = ‚Äú[Svr].[SvrBaselineStats]‚Äù	
+	{	
+        try
+        {	
+			switch($Type)
+			{
+				"BLZ" 
+                {
+                    Write-Log -Message "### CLEAR Temp Table Collection #########################################" -Level Info -Path $logPath
+					$queryBLZ = "IF OBJECT_ID (N'Blitz', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.Blitz END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBLZ, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
 
-			#Processor Counters
-			$Proc = get-Counter -Counter '\Processor(_total)\% Processor Time'-computername $svr
-			$PctProcTm=$proc.counterSamples[0].CookedValue
-			$ProcQ = get-Counter -Counter '\System\Processor Queue Length' -computername $svr
-			$ProcQLen = $ProcQ.counterSamples[0].CookedValue
+                    $sc = $InstanceSQLConn.CreateCommand()                    
+                    Write-Log -Message "### EXECUTING sp_Blitz ############################################" -Level Info -Path $logPath			 
+					$queryBLZ = "EXEC dbo.sp_Blitz
+					 @OutputDatabaseName = 'tempdb'
+					,@OutputSchemaName = 'dbo'
+					,@OutputTableName = 'Blitz'
+					,@CheckUserDatabaseObjects = 1
+                    ,@CheckProcedureCache = 1
+                    ,@OutputProcedureCache = 1
+                    ,@CheckServerInfo = 1"
+                    $sc.CommandText = $queryBLZ
+					$da = new-object System.Data.SqlClient.SqlDataAdapter $sc             
+					$ds = new-object System.Data.DataSet
+					$da.fill($ds) | out-null
 
-			#Disk Counters
-			$dskRd = get-Counter -Counter '\PhysicalDisk(_total)\Avg. Disk sec/Read' -computername $svr
-			$AvDskRd = $dskRd.counterSamples[0].CookedValue
-			$dskWt = get-Counter -Counter '\PhysicalDisk(_total)\Avg. Disk sec/Write' -computername $svr
-			$AvDskWt = $dskWt.counterSamples[0].CookedValue
-			$dskQ = get-Counter -Counter '\PhysicalDisk(_total)\Avg. Disk Queue Length' -computername $svr
-			$AvDskQLen = $dskQ.counterSamples[0].CookedValue
+                    Write-Log -Message "### CENTRALIZING sp_Blitz Data ############################################" -Level Info -Path $logPath	
+					$CITbl = "[FRK].[Blitz]"	
+					$queryBLZ = "SELECT * FROM tempdb.dbo.Blitz"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBLZ, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null       
 
-			#Memory Counters
-			$AvlMB = get-Counter -Counter '\Memory\Available MBytes' -computername $svr
-			$AvailMB = $AvlMB.counterSamples[0].CookedValue
-			$PgFl = get-Counter -Counter '\Paging File(_total)\% Usage' -computername $svr
-			$PgFlUsg = $PgFl.counterSamples[0].CookedValue
+                }
+				"BLB" {}
+				"BZC" {}
+				"BZF" 
+				{		
+                    Write-Log -Message "### CLEAR Temp Table Collection #########################################" -Level Info -Path $logPath
+					$queryBZF = "IF OBJECT_ID (N'BlitzFirst', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzFirst END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					$queryBZF = "IF OBJECT_ID (N'BlitzFirst_FileStats', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzFirst_FileStats END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn) 
+					$dt = new-object System.Data.DataTable 
+					$da.fill($dt) | out-null 
+                    $queryBZF = "IF OBJECT_ID (N'BlitzFirst_PerfmonStats', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzFirst_PerfmonStats END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn) 
+					$dt = new-object System.Data.DataTable 
+					$da.fill($dt) | out-null 
+                    $queryBZF = "IF OBJECT_ID (N'BlitzFirst_WaitStats', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzFirst_WaitStats END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn) 
+					$dt = new-object System.Data.DataTable 
+					$da.fill($dt) | out-null 
+                    $queryBZF = "IF OBJECT_ID (N'BlitzCache', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzCache END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn) 
+					$dt = new-object System.Data.DataTable 
+					$da.fill($dt) | out-null 
 
-			$dt = get-Counter -computername $svr | select @{n="ServerName";e={$svr}}, @{n="InstanceName";e={$inst}}, @{Name="RunDate"; Expression = {$Date}}, 
-			@{Name="PctProcTm"; Expression = {$PctProcTm}}, @{Name="ProcQLen"; Expression = {$ProcQLen}},@{Name="AvDskRd"; Expression = {$AvDskRd}},
-			@{Name="AvDskWt"; Expression = {$AvDskWt}},@{Name="AvDskQLen"; Expression = {$AvDskQLen}}, @{Name="AvailMB"; Expression = {$AvailMB}},
- 			@{Name="PgFlUsg"; Expression = {$PgFlUsg}} | out-datatable
+                    $sc = $InstanceSQLConn.CreateCommand()                    
+                    Write-Log -Message "### EXECUTING sp_BlitzFirst ############################################" -Level Info -Path $logPath			 
+					$queryBZF = "EXEC dbo.sp_BlitzFirst
+					 @OutputDatabaseName = 'tempdb'
+					,@OutputSchemaName = 'dbo'
+					,@OutputTableName = 'BlitzFirst'
+					,@OutputTableNameFileStats = 'BlitzFirst_FileStats'
+					,@OutputTableNamePerfmonStats = 'BlitzFirst_PerfmonStats'
+					,@OutputTableNameWaitStats = 'BlitzFirst_WaitStats'
+					,@OutputTableNameBlitzCache = 'BlitzCache'" 
+                    $sc.CommandText = $queryBZF
+					$da = new-object System.Data.SqlClient.SqlDataAdapter $sc             
+					$ds = new-object System.Data.DataSet
+					$da.fill($ds) | out-null
+                    
+                    Write-Log -Message "### CENTRALIZING sp_BlitzFirst Data ############################################" -Level Info -Path $logPath	
+					$CITbl = "[FRK].[BlitzFirst]"	
+					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null                       
 
-			Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
-			Write-Log -Message "Collecting Server Baseline Stats" -Level Info -Path $logPath
-		}    
+					$CITbl = "[FRK].[BlitzFirst_FileStats]"	
+					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst_FileStats"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn) 
+					$dt = new-object System.Data.DataTable 
+					$da.fill($dt) | out-null 
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null            
+
+					$CITbl = "[FRK].[BlitzFirst_PerfmonStats]"	
+					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst_PerfmonStats"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null         
+
+					$CITbl = "[FRK].[BlitzFirst_WaitStats]"	
+					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst_WaitStats"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null   
+								
+                    $CITbl = "[FRK].[BlitzCache]"	
+					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzCache"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null  				
+				}
+				"BZI" {}
+				"BQS" {}
+				"BZW" {}
+				else 
+                {
+                    Write-Log -Message "Get-FirstResponderKit $type is not a valid type; Please enter in a valid type." -Level Info -Path $logPath  
+                }
+			}
+
+			Write-Log -Message "Get-FirstResponderKit $type on Instance $inst" -Level Info -Path $logPath
+		} 
 		catch 
 		{ 
 			$ex = $_.Exception 
-			write-log -Message "$ex.Message on $Svr While collecting Server Baseline Stats "   -Path $logPath
+		    write-log -Message "$ex.Message on $inst While Get-FirstResponderKit"   -Path $logPath
 		} 
 		finally
 		{
    			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+            $cn.close | Out-Null
 		}
 	}
 	else 
 	{             
-		write-log -Message "Server counter statistics are unavailable on $svr" -Path $logPath
+		write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst" -Path $logPath
 	}
-	################################################################################################################################
+	#################################################################################################################################
 
-} #GetServerListInfo
+} #Get-FirstResponderKit
 ######################################################################################################################################
 
 ######################################################################################################################################
 #Execute Script
 try
 {
-	if ($logPath -notmatch '.+?\\$') { $logPath += '\' } 
+	if ($logPath -notmatch '.+?\\$') { $logPath += '\' }  
+    if ($FirstResponderKitPath -notmatch '.+?\\$') {$FirstResponderKitPath += '\' } 
+
 	$logPath = $logPath + $logFileName
 	$ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
 	write-log -Message "Script Started at $(get-date)"  -Clobber -Path $logPath
 
-	$cn = new-object system.data.sqlclient.sqlconnection(‚Äúserver=$InstanceName;database=$DatabaseName;Integrated Security=true;‚Äù);
+	$cn = new-object system.data.sqlclient.sqlconnection(ìserver=$InstanceName;database=$DatabaseName;Integrated Security=true;î);
 	$cn.Open()
 	$cmd = $cn.CreateCommand()
 	if ($runLocally -eq "true")
@@ -589,12 +616,14 @@ try
 		If ($responds) 
 		{
 			# Calling funtion and passing server and instance parameters
-			GetServerListInfo $server $instance 
+			Create-FirstResponderKit $server $instance $type
+            Get-FirstResponderKit $server $instance $type
 		}
 		else 
 		{
  			# Let the user know we couldn't connect to the server
-			write-log -Message "$server Server did not respond" -Path $logPath
+            if ($instance -match "\\") { $message = $instance + " did not respond. Please check connectivity and try again." } else { $message = $server + "\" +  $instance + " did not respond. Please check connectivity and try again."}	
+			write-log -Message $message -Path $logPath
 		}  
 	}
 	write-log -Message "Script Ended at $(get-date)"  -Path $logPath
@@ -609,11 +638,9 @@ catch
 ######################################################################################################################################
 
 ############################################################################################################################################################
-<# CrazyDBA.COM (CentralDB) - Based on Allen White, Colleen Morrow, Erin Stellato, Jonathan Kehayias and Ed Wilsons Scripts for SQL Inventory and Baselining
-https://www.simple-talk.com/sql/database-administration/let-powershell-do-an-inventory-of-your-servers/
-http://colleenmorrow.com/2012/04/23/the-importance-of-a-sql-server-inventory/
-http://www.sqlservercentral.com/articles/baselines/94657/ 
-https://www.simple-talk.com/sql/performance/a-performance-troubleshooting-methodology-for-sql-server/
-http://blogs.technet.com/b/heyscriptingguy/archive/2011/07/28/use-performance-counter-sets-and-powershell-to-ease-baselining.aspx
-http://www.youtube.com/watch?v=Y8IbadEHoPg #>
+<# 
+	Special thanks to Brent Ozar and Brent Ozar LTD (All of the people who created FirstResponderKit) 
+	for the hard work they do providing us with exceptional scripts to assist with DBA tasks.
+	Please check out FirstResponderKit.org to get the newest version! Also say thanks.
+#>
 ############################################################################################################################################################
