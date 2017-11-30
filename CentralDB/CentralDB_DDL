@@ -98,6 +98,9 @@ GO
 /****** Object:  Schema [Tbl]    Script Date: 12/8/2014 9:37:14 PM ******/
 CREATE SCHEMA [Tbl]
 GO
+/****** Object:  Schema [FRK]    Script Date: 12/8/2014 9:37:14 PM ******/
+CREATE SCHEMA [FRK]
+GO
 /****** Object:  Table [AS].[SSASDBInfo]    Script Date: 12/8/2014 9:37:14 PM ******/
 SET ANSI_NULLS ON
 GO
@@ -262,10 +265,9 @@ CREATE TABLE [DB].[AvailReplicas](
 	[DateAdded] [smalldatetime] NULL,
 	[AGRPID] [int] IDENTITY(1,1) NOT NULL
 ) ON [PRIMARY]
-
 GO
-SET ANSI_PADDING ON
 
+SET ANSI_PADDING ON
 GO
 /****** Object:  Index [CI_AGReplInfo]    Script Date: 12/8/2014 9:37:14 PM ******/
 CREATE CLUSTERED INDEX [CI_AGReplInfo] ON [DB].[AvailReplicas]
@@ -275,6 +277,34 @@ CREATE CLUSTERED INDEX [CI_AGReplInfo] ON [DB].[AvailReplicas]
 	[DateAdded] ASC,
 	[AGRPID] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 85) ON [PRIMARY]
+GO
+
+/****** Object:  Table [dbo].[Blitz]    Script Date: 11/30/2017 11:50:05 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [FRK].[Blitz](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[ServerName] [nvarchar](128) NULL,
+	[CheckDate] [datetimeoffset](7) NULL,
+	[Priority] [tinyint] NULL,
+	[FindingsGroup] [varchar](50) NULL,
+	[Finding] [varchar](200) NULL,
+	[DatabaseName] [nvarchar](128) NULL,
+	[URL] [varchar](200) NULL,
+	[Details] [nvarchar](4000) NULL,
+	[QueryPlan] [xml] NULL,
+	[QueryPlanFiltered] [nvarchar](max) NULL,
+	[CheckID] [int] NULL,
+ CONSTRAINT [PK_Blitz] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
 GO
 /****** Object:  Table [DB].[DatabaseFiles]    Script Date: 12/8/2014 9:37:14 PM ******/
 SET ANSI_NULLS ON
