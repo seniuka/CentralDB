@@ -333,7 +333,7 @@ function Create-FirstResponderKit($svr, $inst, $type)
     $Command = New-Object System.Data.SQLClient.SQLCommand 
     $Command.Connection = $InstanceSQLConn 
 
-	### Instance Baseline Stats #####################################################################################################	
+	### Instance FirstResponderKit #####################################################################################################	
 	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
 	$responds = $false
 	if ($result.ProcessID -ne $null) {$responds = $true}  
@@ -426,7 +426,7 @@ function Get-FirstResponderKit($svr, $inst, $type)
     $Command = New-Object System.Data.SQLClient.SQLCommand 
     $Command.Connection = $InstanceSQLConn 
 
-	### Instance Baseline Stats #####################################################################################################	
+	### Instance FirstResponderKit #####################################################################################################	
 	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
 	$responds = $false
 	if ($result.ProcessID -ne $null) {$responds = $true}  
@@ -468,8 +468,36 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null       
 
                 }
-				"BLB" {}
-				"BZC" {}
+				"BLB" 
+				{
+				}
+				"BZC" 
+				{
+                    Write-Log -Message "### CLEAR Temp Table Collection #########################################" -Level Info -Path $logPath
+					$queryBZC = "IF OBJECT_ID (N'BlitzCache', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzCache END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZC, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+
+                    $sc = $InstanceSQLConn.CreateCommand()                    
+                    Write-Log -Message "### EXECUTING sp_BlitzCache ############################################" -Level Info -Path $logPath			 
+					$queryBZC = "EXEC dbo.sp_BlitzCache
+								@OutputDatabaseName = 'tempdb' ,
+								@OutputSchemaName = 'dbo' ,
+								@OutputTableName = 'BlitzCache'" 
+                    $sc.CommandText = $queryBZC
+					$da = new-object System.Data.SqlClient.SqlDataAdapter $sc             
+					$ds = new-object System.Data.DataSet
+					$da.fill($ds) | out-null
+
+					Write-Log -Message "### CENTRALIZING sp_BlitzCache Data ############################################" -Level Info -Path $logPath	
+					$CITbl = "[FRK].[BlitzCache]"	
+					$queryBZC = "SELECT * FROM tempdb.dbo.BlitzCache"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZC, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null       
+				}
 				"BZF" 
 				{		
                     Write-Log -Message "### CLEAR Temp Table Collection #########################################" -Level Info -Path $logPath
@@ -545,7 +573,10 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$da.fill($dt) | out-null
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null  				
 				}
-				"BZI" {}
+				"BZI" 
+				{
+
+				}
 				"BQS" {}
 				"BZW" {}
 				else 

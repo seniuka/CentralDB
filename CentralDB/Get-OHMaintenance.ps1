@@ -5270,7 +5270,9 @@ finally{
 	}
 }
 ######################################################################################################################################
- 
+
+######################################################################################################################################
+#Execute Script
  try
  {
      $origBasePath = $LogPath
@@ -5348,9 +5350,17 @@ finally{
     write-log -Message "-----------------------------------------------------------" -Path $LogPath	
  }
 catch 
-	{ 
-        $ex = $_.Exception 
-	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While executing maintenance solution" -Path $LogPath
-        Throw $ex.Message
-	} 
+{ 
+	$ex = $_.Exception 
+	write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While executing maintenance solution" -Path $LogPath
+	Throw $ex.Message
+} 
+#Execute Script
+######################################################################################################################################
 
+######################################################################################################################################
+<# 
+	Special thanks to Ola Hallengren for the hard work and providing us with exceptional scripts to assist with DBA maintenance tasks.
+	Please check out https://ola.hallengren.com/ to get the newest version! Also say thanks.
+#>
+######################################################################################################################################
