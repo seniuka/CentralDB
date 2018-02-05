@@ -245,8 +245,8 @@ function Write-Log
                     Param(
                             [Parameter(ValueFromPipeline=$true,Mandatory=$true)] [ValidateNotNullOrEmpty()]
                             [string] $Message,
-                            [Parameter()] [ValidateSet(“Error”, “Warn”, “Info”)]
-                            [string] $Level = “Info”,
+                            [Parameter()] [ValidateSet("Error", "Warn", "Info")]
+                            [string] $Level = "Info",
                             [Parameter()]
                             [Switch] $NoConsoleOut,
                             [Parameter()]
@@ -254,7 +254,7 @@ function Write-Log
                             [Parameter()] [ValidateRange(1,30)]
                             [Int16] $Indent = 0,     
                             [Parameter()]
-                            [IO.FileInfo] $Path = ”$env:temp\PowerShellLog.txt”,                           
+                            [IO.FileInfo] $Path = "$env:temp\PowerShellLog.txt",                           
                             [Parameter()]
                             [Switch] $Clobber,                          
                             [Parameter()]
@@ -270,7 +270,7 @@ function Write-Log
             Begin {}
             Process {
                     try {                  
-                            $msg = '{0}{1} : {2} : {3}' -f (" " * $Indent), (Get-Date -Format “yyyy-MM-dd HH:mm:ss”), $Level.ToUpper(), $Message                           
+                            $msg = '{0}{1} : {2} : {3}' -f (" " * $Indent), (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Level.ToUpper(), $Message                           
                             if ($NoConsoleOut -eq $false) {
                                     switch ($Level) {
                                             'Error' { Write-Error $Message }
@@ -296,17 +296,16 @@ function Write-Log
                                 $log.set_log($EventLogName)  
                                 $log.set_source($EventSource)                       
                                     switch ($Level) {
-                                            “Error” { $log.WriteEntry($Message, 'Error', $EventID) }
-                                            “Warn”  { $log.WriteEntry($Message, 'Warning', $EventID) }
-                                            “Info”  { $log.WriteEntry($Message, 'Information', $EventID) }
+                                            "Error" { $log.WriteEntry($Message, 'Error', $EventID) }
+                                            "Warn"  { $log.WriteEntry($Message, 'Warning', $EventID) }
+                                            "Info"  { $log.WriteEntry($Message, 'Information', $EventID) }
                                     }
                             }
                     } catch {
-                            throw “Failed to create log entry in: ‘$Path’. The error was: ‘$_’.”
+                            throw "Failed to create log entry in: '$Path'. The error was: '$_'."
                     }
             }    
             End {}    
-
     } #Write-Log
 #####################################################################################################################################
 
@@ -315,14 +314,14 @@ function Write-Log
 function GetServerListInfo($svr, $inst) 
 {
 	$cn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master");
-	$s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $cn
+	$s = new-object ('Microsoft.SqlServer.Management.Smo.Server') $cn
 	$RunDt = Get-Date -format G
 
 	### Missing Indexes #############################################################################################################
 	try 
 	{ 
 		$ErrorActionPreference = "Stop"; #Make all errors terminating
-		$CITbl = “[Inst].[MissingIndexes]”
+		$CITbl = "[Inst].[MissingIndexes]"
 		$query= "Select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(mid.database_id) as DBName, OBJECT_SCHEMA_NAME(mid.[object_id], mid.database_id) as SchemaName, 
 			mid.statement as MITable,migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) AS improvement_measure, 
 		  'CREATE INDEX [IDX'
@@ -343,7 +342,7 @@ function GetServerListInfo($svr, $inst)
 		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 		$dt = new-object System.Data.DataTable
 		$da.fill($dt) | out-null
-		Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
+		Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
 		write-log -Message "Collecting Missing Index Info" -Level Info -Path $logPath
 	}    
 	catch 
@@ -360,54 +359,56 @@ function GetServerListInfo($svr, $inst)
 	### Wait Stats ##################################################################################################################
 	try
 	{
-	$ErrorActionPreference = "Stop"; #Make all errors terminating
-	$CITbl = “[Inst].[WaitStats]”
-	$query= ";WITH [Waits] AS
-			 (SELECT [wait_type], [wait_time_ms] / 1000.0 AS [WaitS],
-				([wait_time_ms] - [signal_wait_time_ms]) / 1000.0 AS [ResourceS],
-				[signal_wait_time_ms] / 1000.0 AS [SignalS],
-				[waiting_tasks_count] AS [WaitCount],
-				100.0 * [wait_time_ms] / SUM ([wait_time_ms]) OVER() AS [Percentage],
-				ROW_NUMBER() OVER(ORDER BY [wait_time_ms] DESC) AS [RowNum]
-			 FROM sys.dm_os_wait_stats
-			 WHERE [wait_type] NOT IN ('CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE', 'SLEEP_TASK',
-			'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH', 'WAITFOR', 'LOGMGR_QUEUE',
-			'CHECKPOINT_QUEUE', 'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BROKER_TO_FLUSH',
-			'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT', 'CLR_AUTO_EVENT', 'DISPATCHER_QUEUE_SEMAPHORE',
-			'FT_IFTS_SCHEDULER_IDLE_WAIT', 'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'BROKER_EVENTHANDLER',
-			'TRACEWRITE', 'FT_IFTSHC_MUTEX', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', 'DIRTY_PAGE_POLL', 'HADR_FILESTREAM_IOMGR_IOCOMPLETION')
-			 )
-	 SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, 
-			 [W1].[wait_type] AS [WaitType], 
-			 CAST ([W1].[WaitS] AS DECIMAL(14, 2)) AS [Wait_S],
-			 CAST ([W1].[ResourceS] AS DECIMAL(14, 2)) AS [Resource_S],
-			 CAST ([W1].[SignalS] AS DECIMAL(14, 2)) AS [Signal_S],
-			 [W1].[WaitCount] AS [WaitCount],
-			 CAST ([W1].[Percentage] AS DECIMAL(4, 2)) AS [Percentage],
-			 CAST (([W1].[WaitS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgWait_S],
-			 CAST (([W1].[ResourceS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgRes_S],
-			 CAST (([W1].[SignalS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgSig_S], ('$RunDt') as DateAdded
-		  FROM [Waits] AS [W1]
-		  INNER JOIN [Waits] AS [W2]
-			 ON [W2].[RowNum] <= [W1].[RowNum]
-		  GROUP BY [W1].[RowNum], [W1].[wait_type], [W1].[WaitS], 
-			 [W1].[ResourceS], [W1].[SignalS], [W1].[WaitCount], [W1].[Percentage]
-		  HAVING SUM ([W2].[Percentage]) - [W1].[Percentage] < 95"
-	$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-	$dt = new-object System.Data.DataTable
-	$da.fill($dt) | out-null
-	#$cn.Close()
-	Write-DataTable -ServerInstance $SQLInst -Database $Centraldb -TableName $CITbl -Data $dt
+		$ErrorActionPreference = "Stop"; #Make all errors terminating
+		$CITbl = "[Inst].[WaitStats]"
+		$query= ";WITH [Waits] AS
+				 (SELECT [wait_type], [wait_time_ms] / 1000.0 AS [WaitS],
+					([wait_time_ms] - [signal_wait_time_ms]) / 1000.0 AS [ResourceS],
+					[signal_wait_time_ms] / 1000.0 AS [SignalS],
+					[waiting_tasks_count] AS [WaitCount],
+					100.0 * [wait_time_ms] / SUM ([wait_time_ms]) OVER() AS [Percentage],
+					ROW_NUMBER() OVER(ORDER BY [wait_time_ms] DESC) AS [RowNum]
+				 FROM sys.dm_os_wait_stats
+				 WHERE [wait_type] NOT IN ('CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE', 'SLEEP_TASK',
+				'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH', 'WAITFOR', 'LOGMGR_QUEUE',
+				'CHECKPOINT_QUEUE', 'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BROKER_TO_FLUSH',
+				'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT', 'CLR_AUTO_EVENT', 'DISPATCHER_QUEUE_SEMAPHORE',
+				'FT_IFTS_SCHEDULER_IDLE_WAIT', 'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'BROKER_EVENTHANDLER',
+				'TRACEWRITE', 'FT_IFTSHC_MUTEX', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', 'DIRTY_PAGE_POLL', 'HADR_FILESTREAM_IOMGR_IOCOMPLETION')
+				 )
+		 SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, 
+				 [W1].[wait_type] AS [WaitType], 
+				 CAST ([W1].[WaitS] AS DECIMAL(14, 2)) AS [Wait_S],
+				 CAST ([W1].[ResourceS] AS DECIMAL(14, 2)) AS [Resource_S],
+				 CAST ([W1].[SignalS] AS DECIMAL(14, 2)) AS [Signal_S],
+				 [W1].[WaitCount] AS [WaitCount],
+				 CAST ([W1].[Percentage] AS DECIMAL(4, 2)) AS [Percentage],
+				 CAST (([W1].[WaitS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgWait_S],
+				 CAST (([W1].[ResourceS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgRes_S],
+				 CAST (([W1].[SignalS] / [W1].[WaitCount]) AS DECIMAL (14, 4)) AS [AvgSig_S], ('$RunDt') as DateAdded
+			  FROM [Waits] AS [W1]
+			  INNER JOIN [Waits] AS [W2]
+				 ON [W2].[RowNum] <= [W1].[RowNum]
+			  GROUP BY [W1].[RowNum], [W1].[wait_type], [W1].[WaitS], 
+				 [W1].[ResourceS], [W1].[SignalS], [W1].[WaitCount], [W1].[Percentage]
+			  HAVING SUM ([W2].[Percentage]) - [W1].[Percentage] < 95"
+		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+		$dt = new-object System.Data.DataTable
+		$da.fill($dt) | out-null
+		#$cn.Close()
+		Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
+		#Write-DataTable -InstanceName $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
+		write-log -Message "Collecting Wait Stats" -Level Info -Path $logPath
 	}    
 	catch 
 	{ 
-			$ex = $_.Exception 
+		$ex = $_.Exception 
 		write-log -Message "$ex.Message on $Svr While collecting Wait Stats "   -Path $logPath 
-		} 
+	} 
 	finally
 	{
    			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
-		}
+	}
 	#################################################################################################################################
 }
 #####################################################################################################################################
@@ -421,7 +422,7 @@ try
 	$ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
 	write-log -Message "Script Started at $(get-date)"  -Clobber -Path $logPath
 
-	$cn = new-object system.data.sqlclient.sqlconnection(“server=$InstanceName;database=$DatabaseName;Integrated Security=true;”);
+	$cn = new-object system.data.sqlclient.sqlconnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;");
 	$cn.Open()
 	$cmd = $cn.CreateCommand()
 	if ($runLocally -eq "true")
