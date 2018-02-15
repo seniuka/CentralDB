@@ -5257,7 +5257,7 @@ try
         {
             write-log -Message "OHMaintenanceSolution | $Type | Completed execution of $TypeName on $server connected to instance $instance" -Path $LogPath
             #write-log -Message "Write-DataTable" -Path $LogPath
-            Write-DataTable -ServerInstance $InstanceName -Database$DatabaseName -TableName $CITbl -Data $dt
+            Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
         }
         else
         {
