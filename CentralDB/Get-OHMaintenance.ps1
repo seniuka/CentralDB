@@ -18,7 +18,8 @@ param(
 	[string]$InstanceName  = "",
 	[string]$DatabaseName  = "CentralDB",	
 	[string]$runLocally    = "false",
-    [int32]$CommandTimeout = 7200,	
+    [int32]$CommandTimeout = 14400,				#4 hours	
+	[int32]$LockTimeout    = 10800,				#3 hours	
     [string]$LogPath       = "",
 	[string]$logFileName   = "Get-OHMaitenance_" + $env:computername + ".log",
 	[string]$BackupPath    = ""
@@ -5024,7 +5025,8 @@ catch
         $ex = $_.Exception 
 	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While creating objects for maintenance solution" -Path $LogPath
 	} 
-finally{
+finally
+	{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
 }
@@ -5097,7 +5099,8 @@ catch
         $ex = $_.Exception 
 	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While cleaning up maintenance solution"  -Path $LogPath
 	} 
-finally{
+finally
+	{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
 }
@@ -5129,12 +5132,13 @@ try
             "DBCC" 
             {
                 $Command = "USE [TempDB];
+				DECLARE @PhysicalOnly nvarchar(1) = 'N' 
 				IF EXISTS ( SELECT 'x' FROM sys.objects WHERE object_id = OBJECT_ID(N'$DatabaseIntegrityCheck') AND type IN ( N'P', N'PC' ) )
 				EXEC [dbo].[$DatabaseIntegrityCheck]
 				@Databases = 'ALL_DATABASES',
 				@CheckCommands = 'CHECKDB',
-				@PhysicalOnly = 'Y',
-                @LockTimeout = 900,
+				@PhysicalOnly = @PhysicalOnly,
+                @LockTimeout = $LockTimeout,
 				@LogToTable = 'Y',
 				@WithTABLERESULTS = 'Y'"
                 $TypeName = "'Database Integrity Check'"
@@ -5155,7 +5159,7 @@ try
 				@MSShippedObjects = 'Y',
 				@SortInTempdb = 'Y',
 				@MaxDOP = 2,
-				@LockTimeout = 3600,
+				@LockTimeout = $LockTimeout,		
 				@LogToTable = 'Y'"
                 $TypeName = "'Database Index Maintenance'"
             }
@@ -5170,7 +5174,7 @@ try
 				@FragmentationHigh = NULL,
 				@UpdateStatistics = 'ALL',
 				@MSShippedObjects = 'Y',
-				@LockTimeout = 3600,
+				@LockTimeout = $LockTimeout,		
 				@LogToTable = 'Y'"
                 $TypeName = "'Database Statistics Maintenance'"
             }			
@@ -5264,9 +5268,10 @@ catch
 	{ 
         $ex = $_.Exception 
 	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While executing maintenance solution"  -Path $LogPath
+		Throw $ex.Message
 	} 
 finally{
-   		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+   		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
 	}
 }
 ######################################################################################################################################
