@@ -1,0 +1,28 @@
+﻿CREATE TABLE [Inst].[CommandLogArchive] (
+    [DatabaseName]        [sysname]        NULL,
+    [SchemaName]          [sysname]        NULL,
+    [ObjectName]          [sysname]        NULL,
+    [ObjectType]          CHAR (2)         NULL,
+    [IndexName]           [sysname]        NULL,
+    [IndexType]           TINYINT          NULL,
+    [StatisticsName]      [sysname]        NULL,
+    [PartitionNumber]     INT              NULL,
+    [ExtendedInfo]        NVARCHAR (MAX)   NULL,
+    [Command]             NVARCHAR (MAX)   NOT NULL,
+    [CommandType]         NVARCHAR (60)    NOT NULL,
+    [StartTime]           DATETIME         NOT NULL,
+    [EndTime]             DATETIME         NULL,
+    [ErrorNumber]         INT              NULL,
+    [ErrorMessage]        NVARCHAR (MAX)   NULL,
+    [ServerName]          [sysname]        NULL,
+    [Type]                VARCHAR (255)    NULL,
+    [BatchGUID]           UNIQUEIDENTIFIER NULL,
+    [DateCreated]         DATETIME         CONSTRAINT [DF_CommandLogArchive_DateCreated] DEFAULT (getdate()) NOT NULL,
+    [DateModified]        DATETIME         CONSTRAINT [DF_CommandLogArchive_DateModified] DEFAULT (getdate()) NOT NULL,
+    [CommandLogID]        INT              NOT NULL,
+    [TimeTakenMS]         AS               (datediff(millisecond,[StartTime],[EndTime])),
+    [CommandLogArchiveID] INT              IDENTITY (1, 1) NOT NULL,
+    [TimeTaken]           AS               (CONVERT([varchar],dateadd(millisecond,datediff(millisecond,[StartTime],[EndTime]),(0)),(114))) PERSISTED,
+    CONSTRAINT [PK_CommandLogArchive_ID] PRIMARY KEY CLUSTERED ([CommandLogArchiveID] ASC, [CommandLogID] ASC, [CommandType] ASC)
+);
+

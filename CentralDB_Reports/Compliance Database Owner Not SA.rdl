@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
   <AutoRefresh>0</AutoRefresh>
-  <DataSources>
+<DataSources>
     <DataSource Name="CentralDB">
-      <DataSourceReference>/SQLInventoryReports/P-SEC-DBS001</DataSourceReference>
+      <DataSourceReference>SQLInventoryReports</DataSourceReference>
       <rd:SecurityType>Integrated</rd:SecurityType>
-      <rd:DataSourceID>830376d8-1902-4d44-befc-0f02eb3240fa</rd:DataSourceID>
+      <rd:DataSourceID>de125617-13fe-4767-b17b-6753af607db7</rd:DataSourceID>
     </DataSource>
   </DataSources>
   <DataSets>

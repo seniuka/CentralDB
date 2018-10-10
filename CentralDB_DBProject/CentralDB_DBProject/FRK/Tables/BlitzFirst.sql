@@ -1,0 +1,26 @@
+﻿CREATE TABLE [FRK].[BlitzFirst] (
+    [ID]                   INT                IDENTITY (1, 1) NOT NULL,
+    [ServerName]           NVARCHAR (128)     NULL,
+    [CheckDate]            DATETIMEOFFSET (7) NULL,
+    [CheckID]              INT                NOT NULL,
+    [Priority]             TINYINT            NOT NULL,
+    [FindingsGroup]        VARCHAR (50)       NOT NULL,
+    [Finding]              VARCHAR (200)      NOT NULL,
+    [URL]                  VARCHAR (200)      NOT NULL,
+    [Details]              NVARCHAR (4000)    NULL,
+    [HowToStopIt]          XML                NULL,
+    [QueryPlan]            XML                NULL,
+    [QueryText]            NVARCHAR (MAX)     NULL,
+    [StartTime]            DATETIMEOFFSET (7) NULL,
+    [LoginName]            NVARCHAR (128)     NULL,
+    [NTUserName]           NVARCHAR (128)     NULL,
+    [OriginalLoginName]    NVARCHAR (128)     NULL,
+    [ProgramName]          NVARCHAR (128)     NULL,
+    [HostName]             NVARCHAR (128)     NULL,
+    [DatabaseID]           INT                NULL,
+    [DatabaseName]         NVARCHAR (128)     NULL,
+    [OpenTransactionCount] INT                NULL,
+    [DetailsInt]           INT                NULL,
+    CONSTRAINT [PK_BlitzFirst] PRIMARY KEY CLUSTERED ([ID] ASC)
+);
+

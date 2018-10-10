@@ -1,6 +1,7 @@
 #####################################################################################################################################
 # Get-FirstResponderKit (https://seniuka.github.io/CentralDB/)
 # This script will collect data points from the following FirstResponderKit scripts.
+# Brent Ozar LTD First Responder Kit Scripts will be loaded from the supplied folder. If it is blank/empty, this script will assume it already exists.
 # ScriptName		 Type - Description of check
 # sp_Blitz:           BLZ - This script checks the health of your SQL Server and gives you a prioritized to-do list of the most urgent things you should consider fixing.
 # sp_BlitzBackups:    BLB - This script checks your backups to see how much data you might lose when this server fails, and how long it might take to recover.
@@ -16,14 +17,16 @@
 #####################################################################################################################################
 #Parameter List
 param(
-	[string]$InstanceName="", #CMS Server with CentralDB
-	[string]$DatabaseName="", #CMS Server with CentralDB
-    [string]$runLocally="false", #This flag is used to reduce the number of remote powershell calls from a single cms
-	[string]$type="", #3 Letters from the following sp_Blitz:BLZ, sp_BlitzBackups:BLB, sp_BlitzCache:BZC, p_BlitzFirst:BZF, sp_BlitzIndex:BZI, sp_BlitzQueryStore:BQS, sp_BlitzWho:BZW
+    [String]$Type, #3 Letters from the following sp_Blitz:BLZ, sp_BlitzBackups:BLB, sp_BlitzCache:BZC, p_BlitzFirst:BZF, sp_BlitzIndex:BZI, sp_BlitzQueryStore:BQS, sp_BlitzWho:BZW
+	[string]$InstanceName  = "",
+	[string]$DatabaseName  = "",	
+	[string]$runLocally    = "false", #This flag is used to reduce the number of remote powershell calls from a single cms
+    [int32]$CommandTimeout = 7200,	
 	[string]$FirstResponderKitPath="", #Where does FirstResponderKit live... the sql files? So we can load the newest version.
 	[string]$FirstResponderKitFilter="Install-Core-Blitz-No-Query-Store.sql", #If you rename them... what are they named by default they are sp_Blitz*.sql...
 	[string]$logPath="",
 	[string]$logFileName="Get-FirstResponderKit_" + $env:computername + ".log"
+
 	)
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
 [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo') | out-null
@@ -333,7 +336,7 @@ function Create-FirstResponderKit($svr, $inst, $type)
     $Command = New-Object System.Data.SQLClient.SQLCommand 
     $Command.Connection = $InstanceSQLConn 
 
-	### Instance Baseline Stats #####################################################################################################	
+	### Instance FirstResponderKit #####################################################################################################	
 	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
 	$responds = $false
 	if ($result.ProcessID -ne $null) {$responds = $true}  
@@ -426,7 +429,7 @@ function Get-FirstResponderKit($svr, $inst, $type)
     $Command = New-Object System.Data.SQLClient.SQLCommand 
     $Command.Connection = $InstanceSQLConn 
 
-	### Instance Baseline Stats #####################################################################################################	
+	### Instance FirstResponderKit #####################################################################################################	
 	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
 	$responds = $false
 	if ($result.ProcessID -ne $null) {$responds = $true}  
@@ -465,11 +468,39 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBLZ, $InstanceSQLConn)
 					$dt = new-object System.Data.DataTable
 					$da.fill($dt) | out-null
-					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null       
-
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null      
                 }
-				"BLB" {}
-				"BZC" {}
+				"BLB" 
+				{
+				
+				}
+				"BZC" 
+				{
+                    Write-Log -Message "### CLEAR Temp Table Collection #########################################" -Level Info -Path $logPath
+					$queryBZC = "IF OBJECT_ID (N'BlitzCache', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.BlitzCache END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZC, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+
+                    $sc = $InstanceSQLConn.CreateCommand()                    
+                    Write-Log -Message "### EXECUTING sp_BlitzCache ############################################" -Level Info -Path $logPath			 
+					$queryBZC = "EXEC dbo.sp_BlitzCache
+								@OutputDatabaseName = 'tempdb' ,
+								@OutputSchemaName = 'dbo' ,
+								@OutputTableName = 'BlitzCache'" 
+                    $sc.CommandText = $queryBZC
+					$da = new-object System.Data.SqlClient.SqlDataAdapter $sc             
+					$ds = new-object System.Data.DataSet
+					$da.fill($ds) | out-null
+
+					Write-Log -Message "### CENTRALIZING sp_BlitzCache Data ############################################" -Level Info -Path $logPath	
+					$CITbl = "[FRK].[BlitzCache]"	
+					$queryBZC = "SELECT * FROM tempdb.dbo.BlitzCache"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZC, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null       
+				}
 				"BZF" 
 				{		
                     Write-Log -Message "### CLEAR Temp Table Collection #########################################" -Level Info -Path $logPath
@@ -509,7 +540,7 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$ds = new-object System.Data.DataSet
 					$da.fill($ds) | out-null
                     
-                    Write-Log -Message "### CENTRALIZING BlitzFirst Data ############################################" -Level Info -Path $logPath					
+                    Write-Log -Message "### CENTRALIZING sp_BlitzFirst Data ############################################" -Level Info -Path $logPath	
 					$CITbl = "[FRK].[BlitzFirst]"	
 					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst"
 					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
@@ -517,7 +548,6 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$da.fill($dt) | out-null
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null                       
 
-					Write-Log -Message "### CENTRALIZING BlitzFirst_FileStats Data ############################################" -Level Info -Path $logPath
 					$CITbl = "[FRK].[BlitzFirst_FileStats]"	
 					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst_FileStats"
 					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn) 
@@ -525,7 +555,6 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$da.fill($dt) | out-null 
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null            
 
-					Write-Log -Message "### CENTRALIZING BlitzFirst_PerfmonStats Data ############################################" -Level Info -Path $logPath
 					$CITbl = "[FRK].[BlitzFirst_PerfmonStats]"	
 					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst_PerfmonStats"
 					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
@@ -533,15 +562,13 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$da.fill($dt) | out-null
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null         
 
-					Write-Log -Message "### CENTRALIZING BlitzFirst_WaitStats Data ############################################" -Level Info -Path $logPath
 					$CITbl = "[FRK].[BlitzFirst_WaitStats]"	
 					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzFirst_WaitStats"
 					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
 					$dt = new-object System.Data.DataTable
 					$da.fill($dt) | out-null
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null   
-
-					Write-Log -Message "### CENTRALIZING BlitzCache Data ############################################" -Level Info -Path $logPath					
+								
                     $CITbl = "[FRK].[BlitzCache]"	
 					$queryBZF = "SELECT * FROM tempdb.dbo.BlitzCache"
 					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryBZF, $InstanceSQLConn)
@@ -549,12 +576,21 @@ function Get-FirstResponderKit($svr, $inst, $type)
 					$da.fill($dt) | out-null
 					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null  				
 				}
-				"BZI" {}
-				"BQS" {}
-				"BZW" {}
+				"BZI" 
+				{
+
+				}
+				"BQS" 
+				{
+				
+				}
+				"BZW" 
+				{
+				
+				}
 				else 
                 {
-                    Write-Log -Message "Get-FirstResponderKit $type is not a valid type; Please enter in a valid type." -Level Error -Path $logPath  
+                    Write-Log -Message "Get-FirstResponderKit $type is not a valid type; Please enter in a valid type." -Level Info -Path $logPath  
                 }
 			}
 
@@ -636,9 +672,7 @@ try
 catch
 {
 	$ex = $_.Exception 
-	$line = $_.InvocationInfo.ScriptLineNumber
 	write-log -Message "$ex.Message on $svr excuting script Get-BaselineStats.ps1" -Level Error -Path $logPath 
-	write-log -Message "$ex.Message at line number $line in Get-BaselineStats.ps1" -Level Error -Path $logPath 
 }
 #Execute Script
 ######################################################################################################################################

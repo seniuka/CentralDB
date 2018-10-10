@@ -1,0 +1,51 @@
+﻿CREATE TABLE [Inst].[InstanceInfo] (
+    [ServerName]          NVARCHAR (128) NOT NULL,
+    [InstanceName]        NVARCHAR (128) NOT NULL,
+    [IPAddress]           NVARCHAR (50)  NULL,
+    [Port]                NVARCHAR (30)  NULL,
+    [SQLVersion]          NVARCHAR (30)  NULL,
+    [SQLPatchLevel]       NVARCHAR (30)  NULL,
+    [IsSPUpToDate]        BIT            NULL,
+    [SQLEdition]          NVARCHAR (30)  NULL,
+    [SQLVersionNo]        NVARCHAR (50)  NULL,
+    [Collation]           NVARCHAR (50)  NULL,
+    [RootDirectory]       NVARCHAR (256) NULL,
+    [DefaultDataPath]     NVARCHAR (256) NULL,
+    [DefaultLogPath]      NVARCHAR (256) NULL,
+    [ErrorLogPath]        NVARCHAR (256) NULL,
+    [IsCaseSensitive]     BIT            NULL,
+    [IsClustered]         BIT            NULL,
+    [IsFullTextInstalled] BIT            NULL,
+    [IsSingleUser]        BIT            NULL,
+    [IsAlwaysOnEnabled]   BIT            NULL,
+    [TCPEnabled]          BIT            NULL,
+    [NamedPipesEnabled]   BIT            NULL,
+    [ClusterName]         NVARCHAR (128) NULL,
+    [ClusterQuorumState]  NVARCHAR (128) NULL,
+    [ClusterQuorumType]   NVARCHAR (128) NULL,
+    [AlwaysOnStatus]      NVARCHAR (50)  NULL,
+    [MaxMemInMB]          INT            NULL,
+    [MinMemInMB]          INT            NULL,
+    [MaxDOP]              TINYINT        NULL,
+    [NoOfUsrDBs]          SMALLINT       NULL,
+    [NoOfJobs]            SMALLINT       NULL,
+    [NoOfLnkSvrs]         SMALLINT       NULL,
+    [NoOfLogins]          SMALLINT       NULL,
+    [NoOfRoles]           TINYINT        NULL,
+    [NoOfTriggers]        TINYINT        NULL,
+    [NoOfAvailGrps]       TINYINT        NULL,
+    [AvailGrps]           NVARCHAR (MAX) NULL,
+    [IsXTPSupported]      BIT            NULL,
+    [FilFactor]           TINYINT        NULL,
+    [ProcessorUsage]      INT            NULL,
+    [ActiveNode]          NVARCHAR (128) NULL,
+    [ClusterNodeNames]    NVARCHAR (MAX) NULL,
+    [DateAdded]           SMALLDATETIME  NULL,
+    [InstID]              INT            IDENTITY (1, 1) NOT NULL
+);
+
+
+GO
+CREATE CLUSTERED INDEX [CI_InstanceInfo]
+    ON [Inst].[InstanceInfo]([ServerName] ASC, [InstanceName] ASC, [DateAdded] ASC, [InstID] ASC) WITH (FILLFACTOR = 85);
+

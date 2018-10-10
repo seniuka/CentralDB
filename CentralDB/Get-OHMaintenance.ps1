@@ -1,12 +1,15 @@
 #####################################################################################################################################
 # Get-OHMaintenance (https://seniuka.github.io/CentralDB/)
 # This script will execute ola hallengren maintenance solution. Please see https://ola.hallengren.com/ for more details.
-# Backup Full: A Full backup with 
-# Backup TLog
-# Backup Diff
-# DBCC Check
-# Index Maintenance
-# Statstics Maintenance
+# Ola Hallengren's scripts will be loaded from the supplied folder. If it is blank/empty, this script will assume it already exists.
+# Database Backup
+#	Full Backup: FULL # This will take a full backup of the databases.
+#	Differential Backup: DIFF # This will take a differential backup of the databases.
+#	Transaction Log Backup: TLOG # This will take a transaction log backup of the databases.
+# Database Integrity Check: DBCC # This will do a database consistancy check of the databases.
+# IndexOptimize
+#	Index Rebuild/ReOrganize: IDXF # This will rebuild/reorg indexes 
+#	Statstics Rebuild: IDXS
 #
 #                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
 #####################################################################################################################################
@@ -14,12 +17,13 @@
 #####################################################################################################################################
 #Parameter List
 param(
-    [String]$Type,
+    [String]$Type,  #4 Letters from the following Database Backup Full Backup:FBAK, Differential Backup: DBAK, Transaction Log Backup: TBAK, Database Integrity Check: DBCC, IndexOptimize Index Rebuild/ReOrganize: IDXF, Statstics Rebuild: IDXS
 	[string]$InstanceName  = "",
-	[string]$DatabaseName  = "CentralDB",	
+	[string]$DatabaseName  = "",	
 	[string]$runLocally    = "false",
-    [int32]$CommandTimeout = 14400,				#4 hours	
-	[int32]$LockTimeout    = 10800,				#3 hours	
+    [int32]$CommandTimeout = 7200,	
+	[string]$OHMaintenacePath   = "", #Where does Ola Hallengren's Maintenance live... the sql files? So we can load the newest version.
+	[string]$OHMaintenaceFilter = "MaintenanceSolution.sql", #If you rename them... what are they named by default they are *.sql...
     [string]$LogPath       = "",
 	[string]$logFileName   = "Get-OHMaitenance_" + $env:computername + ".log",
 	[string]$BackupPath    = ""
@@ -318,6 +322,202 @@ function Write-Log
 
     } #Write-Log
 #####################################################################################################################################
+
+#####################################################################################################################################
+#Create-OHMaintenance [Function to create the tables and scripts for the Ola Hallengren]
+function Create-OHMaintenance($svr, $inst, $type) 
+{
+	# Create an ADO.Net connection to the instance
+	$InstanceSQLConn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=tempdb;");
+    $sc = $InstanceSQLConn.CreateCommand()  
+    $s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $InstanceSQLConn
+	$SQLServerConnection = $inst
+    $InstanceSQLConn.Open()
+    $Command = New-Object System.Data.SQLClient.SQLCommand 
+    $Command.Connection = $InstanceSQLConn 
+
+	### Instance OHMaintenance #####################################################################################################	
+	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
+	$responds = $false
+	if ($result.ProcessID -ne $null) {$responds = $true}  
+	If ($responds) 
+	{
+		try
+		{
+            $SQLArray = New-Object System.Collections.ArrayList
+            $i = 0
+            $Path = $FirstResponderKitPath
+            $Filter = $FirstResponderKitFilter   
+            $FirstResponderKitFiles = Get-ChildItem -LiteralPath $Path -Filter $Filter -File
+			Write-Log -Message "### FILE PROCSSING ############################################" -Level Info -Path $logPath
+			foreach($FirstResponderKitFile in $FirstResponderKitFiles)
+			{
+                $SQLCommandText = @(Get-Content -Path $FirstResponderKitFile.FullName) 
+                $message = "### LOADING FILE " + $FirstResponderKitFile.FullName
+				Write-Log -Message $message -Level Info -Path $logPath  
+                $i = 0
+                foreach($SQLString in $SQLCommandText) 
+                { 
+                    if($SQLString.Trim() -ne "GO") 
+                    { 
+                        $i = $i + 1
+                        $SQLPacket += $SQLString.Trim() + "`n"        
+                    } 
+                    else 
+                    {  
+                        if($SQLPacket.Length -gt 0)
+                        {
+                            $message = "### Executing " + $i + " lines." 
+                            Write-Log -Message $message -Level Info -Path $logPath
+                            $Command.CommandText = $SQLPacket 
+                            $Command.ExecuteNonQuery()  | out-null 
+                            $SQLPacket = ""
+                            $SQLString = ""                           
+                        }                       
+                        $i = 0
+                    }                                                 
+                                        
+                    if($SQLPacket.Length -eq 0 -AND $SQLString.Length -ne 0 -AND $SQLString.Trim() -ne "GO")
+                    {
+                        $SQLPacket = $SQLString.Trim() + "`n" 
+                        if($SQLPacket.Length -gt 0)
+                        {
+                            $message = "### Executing ?!?" + $i + " lines." 
+                            Write-Log -Message $message -Level Info -Path $logPath
+                            $Command.CommandText = $SQLPacket 
+                            $Command.ExecuteNonQuery() 
+                            $SQLPacket = ""
+                            $SQLString = ""
+                        }                       
+                        $i = 0
+                    }             
+                } 
+            }
+
+            if ($InstanceSQLConn.State -eq "Open"){$InstanceSQLConn.Close()} 
+			Write-Log -Message "Create-FirstResponderKit $type on Instance $inst" -Level Info -Path $logPath
+		} 
+		catch 
+		{ 
+			$ex = $_.Exception 
+		    write-log -Message "$ex.Message on $inst While Create-FirstResponderKit" -Path $logPath
+		} 
+		finally
+		{
+   			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+            $InstanceSQLConn.close | Out-Null
+		}
+	}
+	else 
+	{             
+		write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst" -Path $logPath
+	}
+	#################################################################################################################################
+
+} #Create-OHMaintenance
+######################################################################################################################################
+	
+#####################################################################################################################################
+#Get-OHMaintenance [Function to create the tables and scripts for the Ola Hallengren]
+function Get-OHMaintenance($svr, $inst, $type) 
+{
+	# Create an ADO.Net connection to the instance
+	$InstanceSQLConn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=tempdb;");
+    $s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $InstanceSQLConn
+	$SQLServerConnection = $inst
+    $InstanceSQLConn.Open()
+    $Command = New-Object System.Data.SQLClient.SQLCommand 
+    $Command.Connection = $InstanceSQLConn 
+
+	### Instance OHMaintenance #####################################################################################################	
+	$result = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
+	$responds = $false
+	if ($result.ProcessID -ne $null) {$responds = $true}  
+	If ($responds) 
+	{	
+        try
+        {	
+			switch($Type)
+			{
+				"FULL" 
+                {
+                    $sc = $InstanceSQLConn.CreateCommand()                    
+                    Write-Log -Message "### EXECUTING OHMaintenance ############################################" -Level Info -Path $logPath			 
+					$queryFULL = ""
+                    $sc.CommandText = $queryFULL
+					$da = new-object System.Data.SqlClient.SqlDataAdapter $sc             
+					$ds = new-object System.Data.DataSet
+					$da.fill($ds) | out-null
+
+                    Write-Log -Message "### Updating OHMaintenance Table ############################################" -Level Info -Path $logPath	
+					$CITbl = "[Inst].[CommandLog]"	
+					$queryFULL = "UPDATE tempdb.dbo.CommandLog"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryFULL, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+
+                    Write-Log -Message "### Local OHMaintenance Centralizing to Management Server ############################################" -Level Info -Path $logPath	
+					$CITbl = "[Inst].[CommandLog]"	
+					$queryFULL = "SELECT * FROM tempdb.dbo.CommandLog"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryFULL, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+					Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt -Verbose | out-null      
+
+					Write-Log -Message "### CLEAR OHMaintenance #########################################" -Level Info -Path $logPath
+					$queryFULL = "IF OBJECT_ID (N'Blitz', N'U') IS NOT NULL BEGIN DELETE FROM tempdb.dbo.CommandLog WHERE CommandLogGUID = N'$GUID' END"
+					$da = new-object System.Data.SqlClient.SqlDataAdapter ($queryFULL, $InstanceSQLConn)
+					$dt = new-object System.Data.DataTable
+					$da.fill($dt) | out-null
+                }
+				"DIFF" 
+				{
+				
+				}
+				"TLOG" 
+				{
+                    
+				}
+				"IDXS" 
+				{                    			
+				
+				}
+				"IDXF" 
+				{
+
+				}
+				"DBCC" 
+				{
+				
+				}
+				else 
+                {
+                    Write-Log -Message "Get-OHMaintenance $type is not a valid type; Please enter in a valid type." -Level Info -Path $logPath  
+                }
+			}
+
+			Write-Log -Message "Get-OHMaintenance $type on Instance $inst" -Level Info -Path $logPath
+		} 
+		catch 
+		{ 
+			$ex = $_.Exception 
+		    write-log -Message "$ex.Message on $inst While Get-OHMaintenance"   -Path $logPath
+		} 
+		finally
+		{
+   			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+            $cn.close | Out-Null
+		}
+	}
+	else 
+	{             
+		write-log -Message "SQL Server DB Engine is not Installed or Started or inaccessible on $inst" -Path $logPath
+	}
+	#################################################################################################################################
+
+} #Get-OHMaintenance
+######################################################################################################################################
+
 
 
 ######################################################################################################################################
@@ -5008,6 +5208,12 @@ END"
                 $dt = new-object System.Data.DataTable
                 $da.fill($dt) | out-null
             }
+            "DIFF" 
+            {
+                $da = new-object System.Data.SqlClient.SqlDataAdapter ($query3, $cn)
+                $dt = new-object System.Data.DataTable
+                $da.fill($dt) | out-null
+            }
             "TLOG" 
             {
                 $da = new-object System.Data.SqlClient.SqlDataAdapter ($query3, $cn)
@@ -5025,13 +5231,12 @@ catch
         $ex = $_.Exception 
 	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While creating objects for maintenance solution" -Path $LogPath
 	} 
-finally
-	{
+finally{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
 }
 ######################################################################################################################################
- 	
+
 ######################################################################################################################################
 #Fucntion to CleanupMaintenancePlan
 function CleanupMaintenancePlan($svr, $inst, $type, $GUID) 
@@ -5074,6 +5279,10 @@ try
             {
                 $query2 = "IF OBJECT_ID('[dbo].[$DatabaseBackup]') IS NOT NULL DROP PROCEDURE [dbo].[$DatabaseBackup];"
             }
+            "DIFF" 
+            {
+                $query2 = "IF OBJECT_ID('[dbo].[$DatabaseBackup]') IS NOT NULL DROP PROCEDURE [dbo].[$DatabaseBackup];"
+            }
             "TLOG" 
             {
                 $query2 = "IF OBJECT_ID('[dbo].[$DatabaseBackup]') IS NOT NULL DROP PROCEDURE [dbo].[$DatabaseBackup];"
@@ -5099,13 +5308,12 @@ catch
         $ex = $_.Exception 
 	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While cleaning up maintenance solution"  -Path $LogPath
 	} 
-finally
-	{
+finally{
    		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
 }
 ######################################################################################################################################
- 
+
 ######################################################################################################################################
 #Fucntion to ExecuteMaintenancePlan
 function ExecuteMaintenancePlan($svr, $inst, $type, $GUID) 
@@ -5119,7 +5327,7 @@ try
     { 
         $ErrorActionPreference = "Stop";
         $CITbl = “[Inst].[CommandLog]”
-	   #$BackupPath = "\\" + ((ipconfig | select-string -notmatch "169.254" | select-string -notmatch "255.255" | select-string -notmatch "192.168" | findstr [0-9].\.)[0].Split()[-1]).ToString().Remove(((ipconfig | findstr [0-9].\.)[0].Split()[-1]).ToString().LastIndexOf('.')) + ".195" + "\SQLBackups\"
+	    #$BackupPath = "\\" + ((ipconfig | select-string -notmatch "169.254" | select-string -notmatch "255.255" | select-string -notmatch "192.168" | findstr [0-9].\.)[0].Split()[-1]).ToString().Remove(((ipconfig | findstr [0-9].\.)[0].Split()[-1]).ToString().LastIndexOf('.')) + ".195" + "\SQLBackups\"
         
 		$TableName = "CommandLog_" + $GUID
 		$CommandExecute = "CommandExecute_" + $GUID
@@ -5132,13 +5340,12 @@ try
             "DBCC" 
             {
                 $Command = "USE [TempDB];
-				DECLARE @PhysicalOnly nvarchar(1) = 'N' 
 				IF EXISTS ( SELECT 'x' FROM sys.objects WHERE object_id = OBJECT_ID(N'$DatabaseIntegrityCheck') AND type IN ( N'P', N'PC' ) )
 				EXEC [dbo].[$DatabaseIntegrityCheck]
 				@Databases = 'ALL_DATABASES',
 				@CheckCommands = 'CHECKDB',
-				@PhysicalOnly = @PhysicalOnly,
-                @LockTimeout = $LockTimeout,
+				@PhysicalOnly = 'Y',
+                @LockTimeout = 900,
 				@LogToTable = 'Y',
 				@WithTABLERESULTS = 'Y'"
                 $TypeName = "'Database Integrity Check'"
@@ -5159,7 +5366,7 @@ try
 				@MSShippedObjects = 'Y',
 				@SortInTempdb = 'Y',
 				@MaxDOP = 2,
-				@LockTimeout = $LockTimeout,		
+				@LockTimeout = 3600,
 				@LogToTable = 'Y'"
                 $TypeName = "'Database Index Maintenance'"
             }
@@ -5174,7 +5381,7 @@ try
 				@FragmentationHigh = NULL,
 				@UpdateStatistics = 'ALL',
 				@MSShippedObjects = 'Y',
-				@LockTimeout = $LockTimeout,		
+				@LockTimeout = 3600,
 				@LogToTable = 'Y'"
                 $TypeName = "'Database Statistics Maintenance'"
             }			
@@ -5196,6 +5403,25 @@ try
 				@NumberOfFiles = 4,
 				@LogToTable = 'Y'"
                 $TypeName = "'Database Backup - Full'"
+            }
+            "DIFF" 
+            {
+                $Command = "USE [TempDB];
+				IF EXISTS ( SELECT 'x' FROM sys.objects WHERE object_id = OBJECT_ID(N'$DatabaseBackup') AND type IN ( N'P', N'PC' ) )
+				EXECUTE dbo.[$DatabaseBackup]
+				@Databases = 'ALL_DATABASES',
+				@Directory = '$BackupPath',
+				@BackupType = 'DIFF',
+				@Verify = 'Y',
+				@Compress = 'Y',
+				@CheckSum = 'Y',
+				@CleanupTime = 336,
+				@BufferCount = 40, 
+				@BlockSize = 65536,
+				@MaxTransferSize = 2097152,
+				@NumberOfFiles = 4,
+				@LogToTable = 'Y'"
+                $TypeName = "'Database Backup - Differential'"
             }
             "TLOG" 
             {
@@ -5257,7 +5483,7 @@ try
         {
             write-log -Message "OHMaintenanceSolution | $Type | Completed execution of $TypeName on $server connected to instance $instance" -Path $LogPath
             #write-log -Message "Write-DataTable" -Path $LogPath
-            Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
+            Write-DataTable -ServerInstance $InstanceName -Database$DatabaseName -TableName $CITbl -Data $dt
         }
         else
         {
@@ -5268,10 +5494,9 @@ catch
 	{ 
         $ex = $_.Exception 
 	    write-log -Message "OHMaintenanceSolution | $Type | $ex.Message on $server While executing maintenance solution"  -Path $LogPath
-		Throw $ex.Message
 	} 
 finally{
-   		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
+   		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
 	}
 }
 ######################################################################################################################################

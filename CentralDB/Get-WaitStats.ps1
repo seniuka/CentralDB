@@ -336,7 +336,6 @@ function GetServerListInfo($svr, $inst)
 		FROM sys.dm_db_missing_index_groups mig
 		INNER JOIN sys.dm_db_missing_index_group_stats migs ON migs.group_handle = mig.index_group_handle
 		INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
-		WHERE migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) > 100000
 		ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC"
 
 		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
@@ -369,12 +368,6 @@ function GetServerListInfo($svr, $inst)
 					100.0 * [wait_time_ms] / SUM ([wait_time_ms]) OVER() AS [Percentage],
 					ROW_NUMBER() OVER(ORDER BY [wait_time_ms] DESC) AS [RowNum]
 				 FROM sys.dm_os_wait_stats
-				 WHERE [wait_type] NOT IN ('CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE', 'SLEEP_TASK',
-				'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH', 'WAITFOR', 'LOGMGR_QUEUE',
-				'CHECKPOINT_QUEUE', 'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BROKER_TO_FLUSH',
-				'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT', 'CLR_AUTO_EVENT', 'DISPATCHER_QUEUE_SEMAPHORE',
-				'FT_IFTS_SCHEDULER_IDLE_WAIT', 'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'BROKER_EVENTHANDLER',
-				'TRACEWRITE', 'FT_IFTSHC_MUTEX', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', 'DIRTY_PAGE_POLL', 'HADR_FILESTREAM_IOMGR_IOCOMPLETION')
 				 )
 		 SELECT ('$Svr') as ServerName, ('$inst') as InstanceName, 
 				 [W1].[wait_type] AS [WaitType], 
@@ -390,8 +383,7 @@ function GetServerListInfo($svr, $inst)
 			  INNER JOIN [Waits] AS [W2]
 				 ON [W2].[RowNum] <= [W1].[RowNum]
 			  GROUP BY [W1].[RowNum], [W1].[wait_type], [W1].[WaitS], 
-				 [W1].[ResourceS], [W1].[SignalS], [W1].[WaitCount], [W1].[Percentage]
-			  HAVING SUM ([W2].[Percentage]) - [W1].[Percentage] < 95"
+				 [W1].[ResourceS], [W1].[SignalS], [W1].[WaitCount], [W1].[Percentage]"
 		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 		$dt = new-object System.Data.DataTable
 		$da.fill($dt) | out-null

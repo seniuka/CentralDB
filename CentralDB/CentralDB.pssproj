@@ -34,6 +34,8 @@
     <Compile Include="Get-FirstResponderKit.ps1" />
     <Compile Include="Get-Inventory.ps1" />
     <Compile Include="Check-SQLRURunning.ps1" />
+    <Compile Include="Get-OHMaintenance.ps1" />
+    <Compile Include="Get-OlaHallengren-Index.ps1" />
     <Compile Include="Get-WaitStats.ps1" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />

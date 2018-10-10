@@ -3,9 +3,9 @@
   <AutoRefresh>0</AutoRefresh>
   <DataSources>
     <DataSource Name="CentralDB">
-      <DataSourceReference>/SQLInventoryReports/SQLInventoryReports</DataSourceReference>
+      <DataSourceReference>SQLInventoryReports</DataSourceReference>
       <rd:SecurityType>Integrated</rd:SecurityType>
-      <rd:DataSourceID>fdd3daa4-8b8c-461c-bbe7-f06b67dcd68a</rd:DataSourceID>
+      <rd:DataSourceID>de125617-13fe-4767-b17b-6753af607db7</rd:DataSourceID>
     </DataSource>
   </DataSources>
   <DataSets>

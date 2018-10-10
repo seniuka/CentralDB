@@ -12,7 +12,7 @@
       <rd:DataSourceID>5d7767a8-e71e-451a-8410-998f15ebb157</rd:DataSourceID>
     </DataSource>
     <DataSource Name="dSourceSQLInventoryReports">
-      <DataSourceReference>/SQLInventoryReports/SQLInventoryReports</DataSourceReference>
+      <DataSourceReference>SQLInventoryReports</DataSourceReference>
       <rd:SecurityType>None</rd:SecurityType>
       <rd:DataSourceID>33f1ec38-7d64-45d2-ba49-4ee83d5d9618</rd:DataSourceID>
     </DataSource>

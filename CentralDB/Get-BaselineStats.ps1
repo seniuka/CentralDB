@@ -248,8 +248,8 @@ function Write-Log
                     Param(
                             [Parameter(ValueFromPipeline=$true,Mandatory=$true)] [ValidateNotNullOrEmpty()]
                             [string] $Message,
-                            [Parameter()] [ValidateSet("Error", "Warn", "Info")]
-                            [string] $Level = "Info",
+                            [Parameter()] [ValidateSet(“Error”, “Warn”, “Info”)]
+                            [string] $Level = “Info”,
                             [Parameter()]
                             [Switch] $NoConsoleOut,
                             [Parameter()]
@@ -257,7 +257,7 @@ function Write-Log
                             [Parameter()] [ValidateRange(1,30)]
                             [Int16] $Indent = 0,     
                             [Parameter()]
-                            [IO.FileInfo] $Path = "$env:temp\PowerShellLog.txt",                           
+                            [IO.FileInfo] $Path = ”$env:temp\PowerShellLog.txt”,                           
                             [Parameter()]
                             [Switch] $Clobber,                          
                             [Parameter()]
@@ -273,7 +273,7 @@ function Write-Log
             Begin {}
             Process {
                     try {                  
-                            $msg = '{0}{1} : {2} : {3}' -f (" " * $Indent), (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Level.ToUpper(), $Message                           
+                            $msg = '{0}{1} : {2} : {3}' -f (" " * $Indent), (Get-Date -Format “yyyy-MM-dd HH:mm:ss”), $Level.ToUpper(), $Message                           
                             if ($NoConsoleOut -eq $false) {
                                     switch ($Level) {
                                             'Error' { Write-Error $Message }
@@ -299,13 +299,13 @@ function Write-Log
                                 $log.set_log($EventLogName)  
                                 $log.set_source($EventSource)                       
                                     switch ($Level) {
-                                            "Error" { $log.WriteEntry($Message, 'Error', $EventID) }
-                                            "Warn"  { $log.WriteEntry($Message, 'Warning', $EventID) }
-                                            "Info"  { $log.WriteEntry($Message, 'Information', $EventID) }
+                                            “Error” { $log.WriteEntry($Message, 'Error', $EventID) }
+                                            “Warn”  { $log.WriteEntry($Message, 'Warning', $EventID) }
+                                            “Info”  { $log.WriteEntry($Message, 'Information', $EventID) }
                                     }
                             }
                     } catch {
-                            throw "Failed to create log entry in: '$Path'. The error was: '$_'."
+                            throw “Failed to create log entry in: ‘$Path’. The error was: ‘$_’.”
                     }
             }    
             End {}    
@@ -319,7 +319,7 @@ function GetServerListInfo($svr, $inst)
 {
 	# Create an ADO.Net connection to the instance
 	$cn = new-object system.data.SqlClient.SqlConnection("Data Source=$inst;Integrated Security=SSPI;Initial Catalog=master");
-	$s = new-object ('Microsoft.SqlServer.Management.Smo.Server') $cn
+	$s = new-object (‘Microsoft.SqlServer.Management.Smo.Server’) $cn
 	$SQLServerConnection = $inst
 
 	### Instance Baseline Stats #####################################################################################################	
@@ -331,7 +331,7 @@ function GetServerListInfo($svr, $inst)
 		try
 		{
 			$ErrorActionPreference = "Stop"; #Make all errors terminating
-			$CITbl = "[Inst].[InsBaselineStats]"
+			$CITbl = “[Inst].[InsBaselineStats]”
 			$query= "DECLARE @CounterPrefix NVARCHAR(30)
 			SET @CounterPrefix = CASE
 				WHEN @@SERVICENAME = 'MSSQLSERVER'
@@ -502,7 +502,7 @@ function GetServerListInfo($svr, $inst)
 		{
 			$ErrorActionPreference = "Stop"; #Make all errors terminating
 			$Date= Get-Date -format G
-			$CITbl = "[Svr].[SvrBaselineStats]"	
+			$CITbl = “[Svr].[SvrBaselineStats]”	
 
 			#Processor Counters
 			$Proc = get-Counter -Counter '\Processor(_total)\% Processor Time'-computername $svr
@@ -560,7 +560,7 @@ try
 	$ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
 	write-log -Message "Script Started at $(get-date)"  -Clobber -Path $logPath
 
-	$cn = new-object system.data.sqlclient.sqlconnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;");
+	$cn = new-object system.data.sqlclient.sqlconnection(“server=$InstanceName;database=$DatabaseName;Integrated Security=true;”);
 	$cn.Open()
 	$cmd = $cn.CreateCommand()
 	if ($runLocally -eq "true")
