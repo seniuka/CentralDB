@@ -6,7 +6,12 @@
 #                             PhysicalDisk(_total)\Avg. Disk sec/Write, PhysicalDisk(_total)\Avg. Disk Queue Length, Memory\Available MBytes, 
 #                             Paging File(_total)\% Usage
 #
-#                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
+# Assumptions: 
+#    This script will be executed by a service account with local server admin and sysadmin or elevated privleges to the database server.
+#    This script uses intergrated authentication to insert data into the central management db, this service account will need permissions to insert data.
+#
+#
+#                                                            This script has been branched from https://github.com/SeniukA/CentralDB
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -332,12 +337,23 @@ function GetServerListInfo($svr, $inst)
 		{
 			$ErrorActionPreference = "Stop"; #Make all errors terminating
 			$CITbl = "[Inst].[InsBaselineStats]"
-			$query= "DECLARE @CounterPrefix NVARCHAR(30)
+			
+			$SQLProc = get-Counter -Counter '\Process(SQLServr*)\% Processor Time'-computername $svr
+			$SQLProcTime = $SQLProc.counterSamples[0].CookedValue
+			$Proc = get-Counter -Counter '\Processor(_total)\% Processor Time'-computername $svr
+			$ProcTm =$proc.counterSamples[0].CookedValue
+			
+			$query= "
+			DECLARE @BufferCachePercentage		smallmoney
+			DECLARE @ProcedureCachePercentage	smallmoney
+			DECLARE @CounterPrefix NVARCHAR(30)
 			SET @CounterPrefix = CASE
 				WHEN @@SERVICENAME = 'MSSQLSERVER'
 				THEN 'SQLServer:'
 				ELSE 'MSSQL$'+@@SERVICENAME+':'
 				END;
+			-- Capture the first counter set
+
 			-- Capture the first counter set
 			SELECT CAST(1 AS INT) AS collection_instance ,
 				  [OBJECT_NAME] ,
@@ -352,6 +368,8 @@ function GetServerListInfo($svr, $inst)
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Lazy Writes/sec')
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page reads/sec')
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page writes/sec')
+				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Readahead pages/sec')
+				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Checkpoint pages/sec')				
 				OR ( OBJECT_NAME = @CounterPrefix+'Databases' AND counter_name = 'Log Growths')
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Free list stalls/sec')							 
 				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'User Connections')
@@ -368,8 +386,10 @@ function GetServerListInfo($svr, $inst)
 				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'Processes Blocked')
 				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Lock Wait Time (ms)')
 				OR ( OBJECT_NAME = @CounterPrefix+'Memory Manager' AND counter_name = 'Memory Grants Pending')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods'AND counter_name = 'Page Splits/sec') ) 
-				AND (instance_name = '' or instance_name = '_Total') 
+				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods'AND counter_name = 'Page Splits/sec') 
+				OR ( OBJECT_NAME = @CounterPrefix+'Workload Group Stats'AND counter_name = 'CPU usage %')
+				OR ( OBJECT_NAME = @CounterPrefix+'Workload Group Stats'AND counter_name = 'CPU usage % base'))                                                                                                              
+				AND (instance_name = '' or instance_name = '_Total' or instance_name = 'default') 
 			-- Wait on Second between data collection
 			WAITFOR DELAY '00:00:01'
 			-- Capture the second counter set
@@ -386,6 +406,8 @@ function GetServerListInfo($svr, $inst)
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Lazy Writes/sec')
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page reads/sec')
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Page writes/sec')
+				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Readahead pages/sec')
+				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Checkpoint pages/sec')
 				OR ( OBJECT_NAME = @CounterPrefix+'Databases' AND counter_name = 'Log Growths')
 				OR ( OBJECT_NAME = @CounterPrefix+'Buffer Manager' AND counter_name = 'Free list stalls/sec')							 
 				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'User Connections')
@@ -402,9 +424,41 @@ function GetServerListInfo($svr, $inst)
 				OR ( OBJECT_NAME = @CounterPrefix+'General Statistics' AND counter_name = 'Processes Blocked')
 				OR ( OBJECT_NAME = @CounterPrefix+'Locks' AND counter_name = 'Lock Wait Time (ms)')
 				OR ( OBJECT_NAME = @CounterPrefix+'Memory Manager' AND counter_name = 'Memory Grants Pending')
-				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods'AND counter_name = 'Page Splits/sec') ) 
-				AND (instance_name = '' or instance_name = '_Total') 
+				OR ( OBJECT_NAME = @CounterPrefix+'Access Methods'AND counter_name = 'Page Splits/sec') 
+				OR ( OBJECT_NAME = @CounterPrefix+'Workload Group Stats'AND counter_name = 'CPU usage %')
+				OR ( OBJECT_NAME = @CounterPrefix+'Workload Group Stats'AND counter_name = 'CPU usage % base'))   				
+				AND (instance_name = '' or instance_name = '_Total' or instance_name = 'default') 
 			--Jeremiah Nellis
+			
+
+				select
+				@BufferCachePercentage = 100.0 + (100.0 * (Curr.cntr_value - Base.cntr_value) / Base.cntr_value)
+				from
+				(
+				SELECT object_name, counter_name, cntr_value FROM sys.dm_os_performance_counters
+				where OBJECT_NAME = @CounterPrefix+'Buffer Manager' and counter_name in ('Buffer Cache Hit Ratio')
+				) as curr
+				cross apply
+				(
+				SELECT object_name, counter_name, cntr_value FROM sys.dm_os_performance_counters
+				where OBJECT_NAME = @CounterPrefix+'Buffer Manager' and counter_name in ('Buffer cache hit ratio base')
+				) as base
+
+
+				select
+				@ProcedureCachePercentage = 100.0 + (100.0 * (Curr.cntr_value - Base.cntr_value) / Base.cntr_value)
+				from
+				(
+				SELECT object_name, counter_name, cntr_value FROM sys.dm_os_performance_counters
+				where instance_name = '_Total' and OBJECT_NAME = @CounterPrefix+'Plan Cache' and counter_name in ('Cache Hit Ratio')
+				) as curr
+				cross apply
+				(
+				SELECT object_name, counter_name, cntr_value FROM sys.dm_os_performance_counters
+				where instance_name = '_Total' and OBJECT_NAME = @CounterPrefix+'Plan Cache' and counter_name in ('Cache Hit Ratio Base')
+				) as base
+
+			
 			select 
 				('$Svr') as ServerName, ('$inst') as InstanceName,  --getdate() as RunDate,
 				[Forwarded Records/sec] as FwdRecSec,
@@ -427,12 +481,19 @@ function GetServerListInfo($svr, $inst)
 				[Memory Grants Pending] as MemGrnts,
 				[Batch Requests/sec] as BatReqSec,
 				[SQL Compilations/sec] as SQLCompSec,
-				[SQL Re-Compilations/sec] as SQLReCompSec
+				[SQL Re-Compilations/sec] as SQLReCompSec,
+				($SQLProcTime) as SQLProcessorUsage,
+				($ProcTm) as SQLProcessorUsageBase,
+				@BufferCachePercentage as BufferCachePercentage,
+				@ProcedureCachePercentage as ProcedureCachePercentage,
+				[Readahead pages/sec] as ReadAheadReadsSec,
+				[Checkpoint pages/sec] as CheckpointWritesSec
 			   -- add your additional counters here
 			From (SELECT  s.counter_name ,
-					CASE WHEN i.cntr_type = 272696576
-					  THEN s.cntr_value - i.cntr_value
-					  WHEN i.cntr_type = 65792 THEN s.cntr_value
+					CASE 
+						WHEN i.cntr_type = 272696576 THEN s.cntr_value - i.cntr_value
+						WHEN i.cntr_type = 65792 THEN s.cntr_value
+					    ELSE i.cntr_value
 					END AS cntr_value
 			FROM #perf_counters_init AS i
 			  JOIN  #perf_counters_second AS s
@@ -464,10 +525,15 @@ function GetServerListInfo($svr, $inst)
 					[Memory Grants Pending],
 					[Batch Requests/sec],
 					[SQL Compilations/sec],
-					[SQL Re-Compilations/sec]
+					[SQL Re-Compilations/sec],
+					[CPU usage %],
+					[CPU usage % base],
+					[Readahead pages/sec],
+					[Checkpoint pages/sec]
 					 -- add the same additional counters here
 				) 
 			) as PivotTable
+			
 			-- Cleanup tables
 			DROP TABLE #perf_counters_init
 			DROP TABLE #perf_counters_second"
@@ -531,11 +597,46 @@ function GetServerListInfo($svr, $inst)
 
 			Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
 			Write-Log -Message "Collecting Server Baseline Stats" -Level Info -Path $logPath
+										
 		}    
 		catch 
 		{ 
 			$ex = $_.Exception 
-			write-log -Message "$ex.Message on $Svr While collecting Server Baseline Stats "   -Path $logPath
+			write-log -Message "$ex.Message on $Svr While collecting Server Baseline Stats " -Path $logPath
+		} 
+		finally
+		{
+   			$ErrorActionPreference = "Continue"; #Reset the error action pref to default
+		}
+	}
+	else 
+	{             
+		write-log -Message "Server counter statistics are unavailable on $svr" -Path $logPath
+	}
+	
+	### Server Baseline Drive Stats ####################################################################################################### 
+	if ((get-counter -ListSet process).MachineName -eq $svr) {$responds = $true}  
+	If ($responds) 
+	{
+		try
+		{
+			$ErrorActionPreference = "Stop"; #Make all errors terminating
+			$Date= Get-Date -format G		
+			$CITbl = "[Svr].[SvrBaselineDriveStats]"	
+			
+			### Server Drive Statistics
+			$counters="\physicaldisk(*)\% disk time","\PhysicalDisk(*)\Avg. Disk Queue Length","\PhysicalDisk(*)\Avg. Disk sec/Read","\PhysicalDisk(*)\Avg. Disk sec/Write"
+			$dt=Get-Counter $counters -computername $svr | Select-Object -expandProperty CounterSamples | select @{n="ServerName";e={$svr}}, 			
+			@{n="Drive";e={if ($_.InstanceName -eq "_TOTAL") {"Total"} else {$_.InstanceName.ToUpper().Replace("_","").SubString($_.InstanceName.ToUpper().Replace("_","").length - 2, 2)}}}, 
+			@{n="CounterType";e={$_.Path.Substring($_.Path.lastIndexOf('\') + 1)}}, @{n="Value";e={$_.CookedValue}}, @{n="RunDate";e={$Date}} | out-datatable
+				
+			Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
+			Write-Log -Message "Collecting Server Baseline Drive Stats" -Level Info -Path $logPath	
+		}    
+		catch 
+		{ 
+			$ex = $_.Exception 
+			write-log -Message "$ex.Message on $Svr While collecting Server Baseline Drive Stats " -Path $logPath
 		} 
 		finally
 		{
@@ -588,8 +689,18 @@ try
 
 		If ($responds) 
 		{
-			# Calling funtion and passing server and instance parameters
+			# Calling function and passing server and instance parameters
 			GetServerListInfo $server $instance 
+		
+			$cnUpdate = new-object system.data.sqlclient.sqlconnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;");
+			$cnUpdate.Open()
+			$cmdUpdate = $cnUpdate.CreateCommand()
+			$queryUpdate = "UPDATE [Svr].[ServerList] SET [BaselineLastExecDate] = SYSDATETIME() WHERE Baseline='True' and ServerName = '$env:computername';"
+			$cmdUpdate.CommandText = $queryUpdate
+			$adUpdate = New-Object system.data.sqlclient.sqldataadapter ($cmdUpdate.CommandText, $cnUpdate)
+			$dsUpdate = New-Object system.data.dataset
+			$adUpdate.Fill($dsUpdate)
+			$cnUpdate.Close()
 		}
 		else 
 		{
