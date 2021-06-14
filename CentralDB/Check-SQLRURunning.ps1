@@ -4,7 +4,12 @@
 # It will email you if any do not reply, if you supply an email address. Otherwise it will log successful and unsuccessful connections
 # to the log filename and log path
 #
-#                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
+# Assumptions: 
+#    This script will be executed by a service account with guest access into the database server (ping check only).
+#    This script uses intergrated authentication to send an email out, it a valid smtp, to and from are required.
+#
+#
+#                                                            This script has been branched from https://github.com/SeniukA/CentralDB
 #####################################################################################################################################
 
 #####################################################################################################################################
