@@ -10,17 +10,19 @@
 # Reporting Services Info
 # Analysis Services Info 
 #
+# Assumptions: 
+#    This script will be executed by a service account with local admin to the server and sysadmin or elevated privleges to the database server.
+#    This script uses intergrated authentication to insert data into the central management db, this service account will need permissions to insert data.
+#
 #                                                            This script has been branched from https://github.com/CrazyDBA/CentralDB
 #####################################################################################################################################
 
 #####################################################################################################################################
 #Parameter List
 param(
-	[string]$cmsInstanceName="",
-	[string]$cmsDatabaseName="",
-	[string]$cmsLogin="",
-	[string]$cmsPassword="",
-    [string]$runLocally="true", #runs locally only transmits data to CMS if accessible
+	[string]$InstanceName="",
+	[string]$DatabaseName="",
+    [string]$runLocally="true",
 	[string]$logPath="",
 	[string]$logFileName="Get-Inventory_" + $env:computername + ".log"
 )
@@ -32,8 +34,6 @@ param(
 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.RMO") | Out-Null
 #####################################################################################################################################
 
-#####################################################################################################################################
-#DisplayProgress
 function DisplayProgress ($TotalSteps, $CurrentStep, $Activity, $StepText, $Task)
 {
 	# Progress Bar Default Variables
@@ -55,8 +55,6 @@ function DisplayProgress ($TotalSteps, $CurrentStep, $Activity, $StepText, $Task
 	Write-Log -Message $logText -Level Info -Path $logPath
 	if ($AddPauses) { Start-Sleep -Milliseconds $ProgressBarWait }	
 }
-#DisplayProgress
-#####################################################################################################################################
 
 #####################################################################################################################################
 #GetVersion
@@ -73,14 +71,14 @@ function GetVersion ($Version)
 	if($Version -Like '14.0*'){ $SQLVersion = 'SQL Server 2017'}
 	if($Version -Like '15.0*'){ $SQLVersion = 'SQL Server 2019'}
     return $SQLVersion
-} 
-#GetVersion
+} #GetVersion
 #####################################################################################################################################
 
 #####################################################################################################################################
 #GetRSNameSpace
 function GetRSNameSpace ($RSVersion, $getInstanceName)
 { 
+	
 	if($RSVersion -Like '9.*'){ $rs_namespace = 'root\Microsoft\SqlServer\ReportServer\v9' } 
 	elseif ($RSVersion -Like '10.*') { $rs_namespace = "root\Microsoft\SqlServer\ReportServer\RS_" + $getInstanceName + "\v10" }
 	elseif ($RSVersion -Like '11.0*') { $rs_namespace = "root\Microsoft\SqlServer\ReportServer\RS_" + $getInstanceName + "\v11" }
@@ -127,8 +125,7 @@ function GetOSVersion ($OSVersion)
 	elseif($OSVersion -Like '*2016*'){$OSName = 'Windows Server 2016'} 
 	elseif($OSVersion -Like '*2019*'){$OSName = 'Windows Server 2019'} 	
 	return $OSName
-} 
-#GetOSVersion
+} #GetOSVersion
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -146,12 +143,11 @@ function GetEdition ($Edition)
 	elseif($Edition -Like'*Evaluation*'){ $SQLEdition = 'Evaluation Edition'} 
 	elseif($Edition -Like'*Desktop*'){ $SQLEdition = 'Desktop Edition'} 
     return $SQLEdition
-} 
-#GetEdition
+} #GetEdition
 #####################################################################################################################################
 
 #####################################################################################################################################
-#GetIsUpToDate -- modify to use SQLVersion table from brent ozar?
+#GetIsUpToDate
 function GetIsUpToDate ($Version)
 { 
     $IsUpToDate = 'False'
@@ -163,8 +159,7 @@ function GetIsUpToDate ($Version)
 	if ($Version -Like '14.0.3*')  {$IsUpToDate = 'True'}
 	if ($Version -Like '15.0.4*')  {$IsUpToDate = 'True'}	
     return $IsUpToDate;
-} 
-#GetIsUpToDate
+} #GetIsUpToDate
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -194,8 +189,7 @@ function Get-Type
     else { 
         Write-Output 'System.String'      
     } 
-} #
-Get-Type 
+} #Get-Type 
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -267,8 +261,7 @@ function Write-DataTable
         $ex = $_.Exception 
         write-log -Message "$ex.Message on $env:computername"  -Level Error -Path $logPath
     } 
-} 
-#Write-DataTable
+} #Write-DataTable
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -342,8 +335,7 @@ function Out-DataTable
     {     
         Write-Output @(,($dt)) 
     } 
-} 
-#Out-DataTable
+} #Out-DataTable
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -455,8 +447,7 @@ function Write-Log
             }    
             End {}    
 
-    } 
-#Write-Log
+    } #Write-Log
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -537,8 +528,7 @@ function getTcpPort([String] $pHostName, [String] $pInstanceName)
 		return $strTcpPort
 	}		
 	return ""
-} 
-#getTcpPort
+} #getTcpPort
 #####################################################################################################################################
 
 #####################################################################################################################################
@@ -576,7 +566,7 @@ function GetServerListInfo($getServerName, $getInstanceName, $getDatabaseName)
 			@{Name="OSTotalVirtualMemorySizeInGB";Expression={[math]::round(($_.TotalVirtualMemorySize / 1024 / 1024), 2)}},
 			@{Name="OSFreeVirtualMemoryInGB";Expression={[math]::round(($_.FreeVirtualMemory / 1024 / 1024), 2)}}, 
 			@{Name="OSFreeSpaceInPagingFilesInGB";Expression={[math]::round(($_.FreeSpaceInPagingFiles / 1024 / 1024), 2)}}, @{n="DateAdded";e={$RunDt}} | out-datatable
-		Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		#Write-Log -Message "Collecting Operating System Info" -Level Info -Path $logPath
 		#Write-Log -Message "Collecting Operating System Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 		
@@ -594,6 +584,35 @@ function GetServerListInfo($getServerName, $getInstanceName, $getDatabaseName)
 	}
 	#############################################################################################################################
 
+	### Operating System Patches ################################################################################################
+	try 
+	{
+		$CurrentStep = 6;$StepText = "Collecting OS Patches"; $Task = "The patch work on this quilt is fabulious.";
+		DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task
+			
+		$ErrorActionPreference = "Stop"; #Make all errors terminating
+		$CITbl="[Svr].[OSPatchInfo]"
+		$dt= Get-WMIObject win32_quickfixengineering -computername $getServerName | select @{n="ServerName";e={$getServerName}}, Caption, Description, HotFixID, InstalledBy, InstalledOn, @{n="DateAdded";e={$RunDt}} | out-datatable
+		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
+		#Write-Log -Message "Collecting Page File Usage Info" -Level Info -Path $logPath
+		#Write-Log -Message "Collecting Page File Usage Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
+		
+		$CurrentStep = 7;$StepText = "Collecting OS Patches"; $Task = "Wonderful workmanship.";
+		DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task
+				
+	}
+	catch 
+	{ 
+		$ex = $_.Exception 
+		write-log -Message "$ex.Message on $getServerName while collecting OS Patches" -Level Error -NoConsoleOut -Path $logPath
+	}
+	finally
+	{
+		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
+	}
+	#############################################################################################################################
+
+
 	### Page File Usage Info  ###################################################################################################
 	try 
 	{
@@ -606,7 +625,7 @@ function GetServerListInfo($getServerName, $getInstanceName, $getDatabaseName)
 				@{n="PgAllocBaseSzInGB";e={[math]::round(($_.AllocatedBaseSize / 1024), 2)}},
 				@{n="PgCurrUsageInGB";e={[math]::round(($_.CurrentUsage / 1024), 2)}},
 				@{n="PgPeakUsageInGB";e={[math]::round(($_.PeakUsage / 1024), 2)}}, @{n="DateAdded";e={$RunDt}}  | out-datatable
-		Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		#Write-Log -Message "Collecting Page File Usage Info" -Level Info -Path $logPath
 		#Write-Log -Message "Collecting Page File Usage Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 		
@@ -648,8 +667,9 @@ function GetServerListInfo($getServerName, $getInstanceName, $getDatabaseName)
 		$sockets = @(@($processors) | % {$_.SocketDesignation} |select-object -unique).count;
 		$CurrentCPUSpeed = ($Processors | Measure-Object CurrentClockSpeed -max).Maximum
 		$MaxCPUSpeed  =  ($Processors | Measure-Object MaxClockSpeed -max).Maximum
+        $CPUModel = (Get-WmiObject Win32_Processor -ComputerName $getServerName | SELECT-Object Name -First 1).Name
 		$z = Get-WmiObject -Class Win32_SystemServices -ComputerName $getServerName
-		$ip = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $getServerName | Where {$_.IPAddress } | SELECT IPAddress
+		$ip = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $getServerName | Where {$_.IPAddress } | SELECT IPAddress #| Out-String
 
 $domrole = DATA {
 ConvertFrom-StringData -StringData @'
@@ -660,15 +680,15 @@ ConvertFrom-StringData -StringData @'
 4 = Backup Domain Controller 
 5 = Primary Domain Controller
 '@
-}
-		
-		$dt=Get-WMIObject -query "select * from Win32_ComputerSystem" -computername $getServerName | select @{n="ServerName";e={$getServerName}}, @{n="IPAddress";e={$ip}}, Model, Manufacturer, Description, 
+} 
+      		
+		$dt=Get-WMIObject -query "select * from Win32_ComputerSystem" -computername $getServerName | select @{n="ServerName";e={$getServerName}}, @{n="IPAddress";e={$ip}}, @{n="Model";e={$CPUModel}}, Manufacturer, Description, 
 			SystemType, @{n="ActiveNodeName";e={$_.DNSHostName.ToUpper()}}, Domain, @{n="DomainRole"; e={$domrole["$($_.DomainRole)"]}}, PartOfDomain, @{n="NumberofProcessors";e={$sockets}},
 			@{n="NumberofLogicalProcessors";e={$Logical}}, @{n="NumberofCores";e={$cores}}, @{n="IsHyperThreaded";e={if($cores -le $Logical) {'True'} Else {'False'}}}, 
 			@{n="CurrentCPUSpeed";e={$CurrentCPUSpeed}}, @{n="MaxCPUSpeed";e={$MaxCPUSpeed}}, @{n="IsPowerSavingModeON";e={if($CurrentCPUSpeed -ne $MaxCPUSpeed) {'True'} Else {'False'}}},
 			@{Expression={$_.TotalPhysicalMemory / 1GB};Label="TotalPhysicalMemoryInGB"}, AutomaticManagedPagefile, @{n="IsVM";e={if($_.Model -Like '*Virtual*') {'True'} else {'False'}}},
 			@{n="IsClu";e={if ($Z | select PartComponent | where {$_ -like "*ClusSvc*"}) {'True'} else {'False'}}}, @{n="DateAdded";e={$RunDt}} | out-datatable
-			Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+			Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		#Write-Log -Message "Collecting Server Info" -Level Info -Path $logPath
 		#Write-Log -Message "Collecting Server Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 		
@@ -699,7 +719,7 @@ ConvertFrom-StringData -StringData @'
 			Name, Label, FileSystem, @{e={($_.BlockSize /1KB) -as [int]};n="DskClusterSizeInKB"},  @{e={"{0:N2}" -f ($_.Capacity / 1GB)};n="DskTotalSizeInGB"},  
 			@{e={"{0:N2}" -f ($_.Freespace /1GB)};n="DskFreeSpaceInGB"}, @{e={"{0:N2}" -f (($_.Capacity-$_.Freespace) /1GB)};n="DskUsedSpaceInGB"}, 
 			@{e={"{0:P2}" -f ($_.Freespace/$_.Capacity)};n="DskPctFreeSpace"}, @{n="DateAdded";e={$RunDt}} | out-datatable
-		Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		#Write-Log -Message "Collecting Disk and Mountpoint Info" -Level Info -Path $logPath
 		#Write-Log -Message "Collecting Disk and Mountpoint Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 		
@@ -727,9 +747,9 @@ ConvertFrom-StringData -StringData @'
 		#http://msdn.microsoft.com/en-us/library/windows/desktop/aa394418%28v=vs.85%29.aspx
 		#http://www.sqlmusings.com/2009/05/23/how-to-list-sql-server-services-using-powershell/
 		$CITbl="[Svr].[SQLServices]"
-		$dt= Get-WMIObject -query "select * from win32_service where name like 'SQLSERVERAGENT' or name like 'MSSQL%' or name like 'MsDts%' or name like 'ReportServer%' or name like 'SQLBrowser'" `
+		$dt= Get-WMIObject -query "select * from win32_service where name like 'SQLSERVERAGENT' or name like 'MSSQL%' or name like 'MsDts%' or name like 'ReportServer%' or name like '%Reporting%' or name like '%Reporting%' or name like 'SQLBrowser'" `
 			-computername $getServerName  | select @{n="ServerName";e={$getServerName}}, Name, DisplayName, Started, StartMode, State, PathName, StartName, ProcessId, @{n="DateAdded";e={$RunDt}}  | out-datatable
-		Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		#Write-Log -Message "Collecting SQL Services Info" -Level Info -Path $logPath
 		#Write-Log -Message "Collecting SQL Services Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 		
@@ -826,7 +846,7 @@ ConvertFrom-StringData -StringData @'
 					IsXTPSupported, @{n="FilFactor";e={$_.Configuration.FillFactor.ConfigValue}}, ProcessorUsage, @{n="ActiveNode"; e={if($_.IsClustered){$_.ComputerNamePhysicalNetBIOS}}},
 					@{n="ClusterNodeNames"; e={if($_.IsClustered){($_.Databases["master"].ExecuteWithResults("select NodeName from sys.dm_os_cluster_nodes").Tables[0] | select -expand NodeName) -Join ', '}}},
 					@{n="DateAdded";e={$RunDt}} | out-datatable
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Instance Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Instance Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath			
 
@@ -857,7 +877,7 @@ ConvertFrom-StringData -StringData @'
 				$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
 				$dbs=$s.jobserver.jobs
 				$dt= $dbs | select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, name, Description, OwnerLoginName, IsEnabled, category, DateCreated, DateLastModified,  LastRunDate, NextRunDate, LastRunOutcome, CurrentRunRetryAttempt, OperatorToEmail, OperatorToPage, HasSchedule, @{n="DateAdded";e={$RunDt}} | out-datatable
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting SQL Agent Job Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting SQL Agent Job Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath					
 
@@ -890,7 +910,7 @@ ConvertFrom-StringData -StringData @'
 				$jobHistoryFilter.OutComeTypes = 'Failed'
 				$dt= $jobserver.EnumJobHistory($jobHistoryFilter) | Where {$_.RunDate -gt ((Get-Date).AddDays(-1)) -and $_.SqlMessageID -ne 0} | select @{n="ServerName";e={$getServerName}},
 				@{n="InstanceName";e={$getInstanceName}}, JobName,StepID,StepName,Message, RunDate, @{n="DateAdded";e={$RunDt}} | out-datatable
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Failed SQL Agent Job Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Failed SQL Agent Job Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 				
@@ -907,7 +927,73 @@ ConvertFrom-StringData -StringData @'
 				$ErrorActionPreference = "Stop"; #Reset the error action pref to default
 			}
 			#############################################################################################################################
-	
+
+			### Job History #############################################################################################################
+			#http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.agent.jobhistoryfilter_properties%28v=sql.110%29.aspx	
+			try 
+			{
+				$CurrentStep = 12;$StepText = "Collecting SQL Agent History"; $Task = "Old news clippings";
+				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task	
+				
+				$ErrorActionPreference = "Stop"; #Make all errors terminating
+				$CITbl = "[Inst].[JobHistory]"
+				$query= "SELECT 
+						('$getServerName') as ServerName
+						, server as InstanceName
+						, sysjobs.Name
+						, sysjobhistory.job_id
+						, step_id
+						, step_name
+						, [message]
+						, run_status
+						, msdb.dbo.AGENT_DATETIME(run_date, run_time) as JobDateTime
+						, run_duration
+						, OE.Name + ' <' + OE.Email_Address + '>'
+						, [ON].Name + ' <' + isnull([ON].netsend_address, '') + '>'
+						,  OP.Name + ' <' + OP.pager_address + '>'
+						, retries_attempted  
+						,('$RunDt') as DateAdded
+						,BINARY_CHECKSUM(HOST_NAME(), server, sysjobs.Name, sysjobhistory.job_id, step_id, step_name, [message], run_status, msdb.dbo.AGENT_DATETIME(run_date, run_time), run_duration, OE.Name + ' <' + OE.Email_Address + '>', [ON].Name + ' <' + isnull([ON].netsend_address, '') + '>',  OP.Name + ' <' + OP.pager_address + '>',retries_attempted) BinaryCheckSUM					 
+					 FROM msdb.dbo.sysjobhistory 
+					 INNER JOIN msdb.dbo.sysjobs on sysjobs.job_id = sysjobhistory.job_id
+					 LEFT OUTER JOIN msdb.dbo.sysoperators OE on OE.id = sysjobhistory.operator_id_emailed
+					 LEFT OUTER JOIN msdb.dbo.sysoperators [ON] on [ON].id = sysjobhistory.operator_id_netsent
+					 LEFT OUTER JOIN msdb.dbo.sysoperators OP on OP.id = sysjobhistory.operator_id_paged
+					 WHERE isnull([operator_id_netsent], 0) != -255"
+				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+				$dt = new-object System.Data.DataTable
+				$da.fill($dt) | out-null
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
+				#Write-Log -Message "Collecting Database Backup Info" -Level Info -Path $logPath
+				#Write-Log -Message "Collecting Database Backup Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
+
+				$CurrentStep = 12;$StepText = "Collecting SQL Agent History"; $Task = "Ooo, look at that! All of that history";
+				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task
+				
+				#$cn = new-object system.data.SqlClient.SqlConnection("server=$getInstanceName;database=$DatabaseName;Integrated Security=true;");
+				$cn.Open()
+				$cmd = $cn.CreateCommand()
+				$query = "set nocount on;  UPDATE msdb.dbo.sysjobhistory set [operator_id_netsent] = -255 where isnull([operator_id_netsent], 0) != -255;"
+				$cmd.CommandText = $query
+				$rowsAffected = $cmd.ExecuteNonQuery()
+				$cn.Close()
+				write-log -Message "Collecting Database Backupsets Number of Rows Affected ($rowsAffected)" -Level Info -Path $logPath
+				#Write-Log -Message "Collecting Database Backupsets Number of Rows Affected ($rowsAffected) Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
+
+				$CurrentStep = 12;$StepText = "Collecting SQL Agent History"; $Task = "Lets mark that down.";
+				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task													
+			}
+			catch 
+			{ 
+				$ex = $_.Exception 
+				write-log -Message "$ex.Message on $getServerName While Collecting SQL Agent History" -Level Error -NoConsoleOut -Path $logPath
+			}
+			finally
+			{
+				$ErrorActionPreference = "Stop"; #Reset the error action pref to default
+			}	
+			#############################################################################################################################
+
 			###  Login Info #############################################################################################################
 			#http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.login.aspx
 			try 
@@ -920,7 +1006,7 @@ ConvertFrom-StringData -StringData @'
 				$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
 				$dbs=$s.Logins
 				$dt= $dbs | SELECT @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, Name, LoginType, CreateDate, DateLastModified, IsDisabled, IsLocked, @{n="DateAdded";e={$RunDt}} |out-datatable
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Login Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Login Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 
@@ -980,14 +1066,14 @@ ConvertFrom-StringData -StringData @'
 				--IF (SELECT COUNT(*) FROM @ErrorRecap) > 1 BEGIN SELECT * FROM @ErrorRecap END"
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
-				$da.fill($dt) | out-null
+				$da.fill($dt) #| out-null
 								
 				$CITbl = "[Inst].[LoginGroupMembers]"
 				$query = "SET NOCOUNT ON; SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, [LoginName],[LoginType],[LoginPrivilege],[MappedLoginName],[PermissionPath], [GroupName], ('$RunDt') as DateAdded FROM " + $tempTableName + "; DROP TABLE " + $tempTableName + ""
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 							
 				$CurrentStep = 13;$StepText = "Collecting Login Info"; $Task = "That weird uncle too?";
 				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task				
@@ -1015,7 +1101,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Instance Roles Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Instance Roles Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 			
@@ -1045,7 +1131,7 @@ ConvertFrom-StringData -StringData @'
 				$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
 				$dbs=$s.linkedservers
 				$dt= $dbs | SELECT @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, Name, ProviderName, ProductName, ProviderString, DateLastModified, DataAccess, @{n="DateAdded";e={$RunDt}} |out-datatable
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Linked Servers Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Linked Servers Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath		
 
@@ -1073,7 +1159,7 @@ ConvertFrom-StringData -StringData @'
 				$CITbl = "[Inst].[InsTriggers]"
 				$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
 				$dt = $s.Triggers | select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, Name, createdate, datelastmodified, IsEnabled, @{n="DateAdded";e={$RunDt}} |out-datatable
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Instance Level Triggers Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Instance Level Triggers Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 				
@@ -1112,7 +1198,7 @@ ConvertFrom-StringData -StringData @'
 					@{n="DistDB";e={$_.DistributionDatabase}}, @{n="DateAdded";e={$RunDt}} | out-datatable
 				}
 
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Replication Publisher Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Replication Publisher Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 				
@@ -1163,12 +1249,12 @@ ConvertFrom-StringData -StringData @'
 						@{n="LastGoodDBCCChecKDB"; e={$($_.ExecuteWithResults("dbcc dbinfo() with tableresults").Tables[0] | where {$_.Field -eq "dbi_dbccLastKnownGood"}|  Select Value).Value}},
 						AutoClose,  HasFileInCloud, HasMemoryOptimizedObjects, MemoryAllocatedToMemoryOptimizedObjectsInKB, MemoryUsedByMemoryOptimizedObjectsInKB, 
 						@{n="DateAdded";e={$RunDt}}  | out-datatable	
-						Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName "[DB].[DatabaseInfo]" -Data $dt
+						Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName "[DB].[DatabaseInfo]" -Data $dt
 						
 						[string]$nm = $db.Name
 						$dt = $db.Triggers | select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, @{Name="Database"; Expression = {$nm}}, Name, 
 						createdate, datelastmodified, IsEnabled, @{n="DateAdded";e={$RunDt}} |out-datatable
-						Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName "[DB].[Triggers]" -Data $dt
+						Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName "[DB].[Triggers]" -Data $dt
 						
 						#Write-Log -Message "Collecting Database Info $db" -Level Info -Path $logPath
 						#Write-Log -Message "Collecting Database Info $db Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
@@ -1200,9 +1286,9 @@ ConvertFrom-StringData -StringData @'
 				
 				$query= "SET NOCOUNT ON; 
 				declare @db nvarchar(255), @sqlstmtdbroles nvarchar(4000), @sqlstmttmpuserperm nvarchar(4000), @sqlstmttmpHekaton nvarchar(4000) 
-				create table tmpdbroles(DBName varchar(100) default db_name(), DBUser varchar(200), DBRole varchar(100));
-				create table tmpuserperm(DBName SYSNAME, UserName nvarchar(128), ClassDesc nvarchar(60), ObjName sysname, PermName nvarchar(128), PermStat nvarchar(60));					
-				IF SERVERPROPERTY ('IsXTPSupported') = 1 BEGIN create table tmpHekaton(DBName SYSNAME, tblName SYSNAME, IsMemOptimized bit, Durability tinyint, DurabilityDesc nvarchar(60), MemAllocForIdxInKB bigint, MemAllocForTblInKB bigint, MemUsdByIdxInKB bigint, MemUsdByTblInKB bigint); END
+				IF (NOT EXISTS (SELECT 'X' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND  TABLE_NAME = 'tmpdbroles')) BEGIN create table tmpdbroles(DBName varchar(100) default db_name(), DBUser varchar(200), DBRole varchar(100)); END ELSE BEGIN DELETE FROM tmpdbroles END 
+				IF (NOT EXISTS (SELECT 'X' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND  TABLE_NAME = 'tmpuserperm')) BEGIN create table tmpuserperm(DBName SYSNAME, UserName nvarchar(128), ClassDesc nvarchar(60), ObjName sysname, PermName nvarchar(128), PermStat nvarchar(60)); END ELSE BEGIN DELETE FROM tmpuserperm END
+				IF (NOT EXISTS (SELECT 'X' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND  TABLE_NAME = 'tmpHekaton')) BEGIN IF SERVERPROPERTY ('IsXTPSupported') = 1 BEGIN create table tmpHekaton(DBName SYSNAME, tblName SYSNAME, IsMemOptimized bit, Durability tinyint, DurabilityDesc nvarchar(60), MemAllocForIdxInKB bigint, MemAllocForTblInKB bigint, MemUsdByIdxInKB bigint, MemUsdByTblInKB bigint); END END ELSE BEGIN DELETE FROM tmpHekaton END
 
 				DECLARE dbs CURSOR FAST_FORWARD FOR SELECT name FROM sys.databases WHERE database_id > 4 and state = 0
 				OPEN dbs FETCH dbs INTO @db
@@ -1223,7 +1309,7 @@ ConvertFrom-StringData -StringData @'
 				FETCH dbs INTO @db
 				END
 				CLOSE dbs
-				DEALLOCATE dbs"
+				DEALLOCATE dbs;"
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
@@ -1235,7 +1321,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				
 				$CurrentStep = 19;$StepText = "Collecting Detailed Database Information"; $Task = "Hey you do not have permission to touch the food!";
 				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task	
@@ -1244,16 +1330,16 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				
-				$CurrentStep = 19;$StepText = "Collecting Detailed Database Information"; $Task = "I can remember, I have good a memory!";
-				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task	
-				$CITbl = "[Tbl].[HekatonTbls]"
-				$query = "SET NOCOUNT ON; SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, *, ('$RunDt') as DateAdded FROM tempdb..tmpHekaton ORDER BY dbname; DROP TABLE tempdb..tmpHekaton"
-				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-				$dt = new-object System.Data.DataTable
-				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				#$CurrentStep = 19;$StepText = "Collecting Detailed Database Information"; $Task = "I can remember, I have good a memory!";
+				#DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task	
+				#$CITbl = "[Tbl].[HekatonTbls]"
+				#$query = "SET NOCOUNT ON; SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, *, ('$RunDt') as DateAdded FROM tempdb..tmpHekaton ORDER BY dbname; DROP TABLE tempdb..tmpHekaton"
+				#$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+				#$dt = new-object System.Data.DataTable
+				#$da.fill($dt) | out-null
+				#Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				
 				#Write-Log -Message "Collecting DB user roles Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting DB user roles Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath						
@@ -1302,7 +1388,7 @@ ConvertFrom-StringData -StringData @'
 		#		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 		#		$dt = new-object System.Data.DataTable
 		#		$da.fill($dt) | out-null
-		#		Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+		#		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		#		#Write-Log -Message "Collecting DB user roles Info" -Level Info -Path $logPath
 		#		Write-Log -Message "Collecting DB user roles Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 		#				
@@ -1363,7 +1449,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Database Backup Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Database Backup Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1376,6 +1462,7 @@ ConvertFrom-StringData -StringData @'
 				$query = "set nocount on; update msdb.dbo.backupset set [name] = '1' where isnull([name], '0') != '1';"
 				$cmd.CommandText = $query
 				$rowsAffected = $cmd.ExecuteNonQuery()
+				$cn.Close()
 				#write-log -Message "Collecting Database Backupsets Number of Rows Affected ($rowsAffected)" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Database Backupsets Number of Rows Affected ($rowsAffected) Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1409,7 +1496,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Database Files Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Database Files Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath			
 
@@ -1444,7 +1531,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Database Growth Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Database Growth Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1470,7 +1557,7 @@ ConvertFrom-StringData -StringData @'
 				
 		        $ErrorActionPreference = "Stop"; #Make all errors terminating
 		        $CITbl = "[Inst].[MissingIndexes]"
-		        $query= "Select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(mid.database_id) as DBName, OBJECT_SCHEMA_NAME(mid.[object_id], mid.database_id) as SchemaName, 
+		        $query= "Select ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, DB_Name(mid.database_id) as DBName, OBJECT_SCHEMA_NAME(mid.[object_id], mid.database_id) as SchemaName, 
 			        mid.statement as MITable,migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) AS improvement_measure, 
 		            'CREATE INDEX [IDX'
 		            + '_' + LEFT (PARSENAME(mid.statement, 1), 32) + ']'
@@ -1490,7 +1577,7 @@ ConvertFrom-StringData -StringData @'
 		        $da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 		        $dt = new-object System.Data.DataTable
 		        $da.fill($dt) | out-null
-		        Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+		        Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 		        #write-log -Message "Collecting Missing Index Info" -Level Info -Path $logPath
                 
                 $CurrentStep = 23;$StepText = "Collecting Missing Index Information"; $Task = "I think I am sweating?!";
@@ -1499,7 +1586,7 @@ ConvertFrom-StringData -StringData @'
 	        catch 
 	        { 
 		        $ex = $_.Exception 
-		        write-log -Message "$ex.Message on $Svr While Collecting Missing Index Info" -Level Warn -Path $logPath 
+		        write-log -Message "$ex.Message on $getServerName While Collecting Missing Index Info" -Level Warn -Path $logPath 
 	        } 
 	        finally
 	        {
@@ -1508,140 +1595,140 @@ ConvertFrom-StringData -StringData @'
 	        #################################################################################################################################
 
 			### Table Permissions info ##################################################################################################
-			try 
-			{
-				$ErrorActionPreference = "Stop"; #Make all errors terminating
-				$CITbl = "[Tbl].[TblPermissions]"
-				$query= "declare @db varchar(200), @sqlstmt nvarchar(4000)
-    						SET NOCOUNT ON   
-    						create table #tmpuserperm(DBName SYSNAME, UserName nvarchar(128), ClassDesc nvarchar(60),
-						ObjName sysname, PermName nvarchar(128), PermStat nvarchar(60));
-						DECLARE dbs CURSOR FOR
-						SELECT name FROM sys.databases WHERE name not in('msdb','tempdb', 'model')
-						OPEN dbs
-						FETCH dbs INTO @db
-						WHILE @@FETCH_STATUS = 0
-						BEGIN
-       						set @sqlstmt = N'USE ['+ @db +']; ' + ' insert into #tmpuserperm
-									select DB_NAME() as DBname, USER_NAME(p.grantee_principal_id) AS principal_name, p.class_desc,ObjectName = case p.class
-									when 1 then case when p.minor_id=0 then object_name(p.major_id) else object_name(p.major_id)+''->''+ col_name(p.major_id,p.minor_id) end
-									else ''N/A'' end, p.permission_name, p.state_desc AS permission_state from sys.database_permissions p 
-									inner JOIN sys.database_principals dp on p.grantee_principal_id = dp.principal_id where dp.type in (''U'',''S'',''G'')'
-						exec sp_executesql @sqlstmt
-						FETCH dbs INTO @db
-   						END
-						CLOSE dbs
-						DEALLOCATE dbs
-						SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, *, ('$RunDt') as DateAdded FROM #tmpuserperm ORDER BY dbname
-						DROP TABLE #tmpuserperm"
-				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-				$dt = new-object System.Data.DataTable
-				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
-				#Write-Log -Message "Collecting Table Permissions Info" -Level Info -Path $logPath
-				Write-Log -Message "Collecting Table Permissions Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath		
-        
-				$Task           = "Collecting Table Permissions Info"
-				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task					
-			}
-			catch 
-			{ 
-				$ex = $_.Exception 
-				write-log -Message "$ex.Message on $getServerName While Collecting Table Permissions Info" -Level Error -NoConsoleOut -Path $logPath
-			}
-			finally
-			{
-				$ErrorActionPreference = "Stop"; #Reset the error action pref to default
-			}
+		#	try 
+		#	{
+		#		$ErrorActionPreference = "Stop"; #Make all errors terminating
+		#		$CITbl = "[Tbl].[TblPermissions]"
+		#		$query= "declare @db varchar(200), @sqlstmt nvarchar(4000)
+    	#					SET NOCOUNT ON   
+    	#					create table #tmpuserperm(DBName SYSNAME, UserName nvarchar(128), ClassDesc nvarchar(60),
+		#				ObjName sysname, PermName nvarchar(128), PermStat nvarchar(60));
+		#				DECLARE dbs CURSOR FOR
+		#				SELECT name FROM sys.databases WHERE name not in('msdb','tempdb', 'model')
+		#				OPEN dbs
+		#				FETCH dbs INTO @db
+		#				WHILE @@FETCH_STATUS = 0
+		#				BEGIN
+       	#					set @sqlstmt = N'USE ['+ @db +']; ' + ' insert into #tmpuserperm
+		#							select DB_NAME() as DBname, USER_NAME(p.grantee_principal_id) AS principal_name, p.class_desc,ObjectName = case p.class
+		#							when 1 then case when p.minor_id=0 then object_name(p.major_id) else object_name(p.major_id)+''->''+ col_name(p.major_id,p.minor_id) end
+		#							else ''N/A'' end, p.permission_name, p.state_desc AS permission_state from sys.database_permissions p 
+		#							inner JOIN sys.database_principals dp on p.grantee_principal_id = dp.principal_id where dp.type in (''U'',''S'',''G'')'
+		#				exec sp_executesql @sqlstmt
+		#				FETCH dbs INTO @db
+   		#				END
+		#				CLOSE dbs
+		#				DEALLOCATE dbs
+		#				SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, *, ('$RunDt') as DateAdded FROM #tmpuserperm ORDER BY dbname
+		#				DROP TABLE #tmpuserperm"
+		#		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+		#		$dt = new-object System.Data.DataTable
+		#		$da.fill($dt) | out-null
+		#		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
+		#		#Write-Log -Message "Collecting Table Permissions Info" -Level Info -Path $logPath
+		#		Write-Log -Message "Collecting Table Permissions Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath		
+        #
+		#		$Task           = "Collecting Table Permissions Info"
+		#		DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task					
+		#	}
+		#	catch 
+		#	{ 
+		#		$ex = $_.Exception 
+		#		write-log -Message "$ex.Message on $getServerName While Collecting Table Permissions Info" -Level Error -NoConsoleOut -Path $logPath
+		#	}
+		#	finally
+		#	{
+		#		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
+		#	}
 		#	#############################################################################################################################
 			
 			### Memory (Hekaton) Table info #############################################################################################
-			try 
-			{
-				$ErrorActionPreference = "Stop"; #Make all errors terminating
-				$CITbl = "[Tbl].[HekatonTbls]"
-				$query= "IF SERVERPROPERTY ('IsXTPSupported') = 1
-					BEGIN
-					declare @db varchar(200), @sqlstmt nvarchar(4000)
-    					SET NOCOUNT ON   
-    					create table ##tmpHekaton(DBName SYSNAME, tblName SYSNAME, IsMemOptimized bit, Durability tinyint, 
-						DurabilityDesc nvarchar(60), MemAllocForIdxInKB bigint, MemAllocForTblInKB bigint, MemUsdByIdxInKB bigint,
-						MemUsdByTblInKB bigint);
-					DECLARE dbs CURSOR FOR
-					SELECT name FROM sys.databases --WHERE database_id > 4 and state = 0
-					OPEN dbs
-					FETCH dbs INTO @db
-					WHILE @@FETCH_STATUS = 0
-					BEGIN
-       					set @sqlstmt = N'USE ['+ @db +']; ' + ' insert into ##tmpHekaton
-								select DB_NAME() as DBname, t.name as HekatonTblName, t.Is_memory_optimized as IsMemOptimized, t.durability as Durability, t.durability_desc as DurabilityDesc,
-								x.memory_allocated_for_indexes_kb as MemAllocForIdxInKB, x.memory_allocated_for_table_kb as MemAllocForTblInKB,
-								x.memory_used_by_indexes_kb as MemUsdByIdxInKB, x.memory_used_by_table_KB as MemUsdByTblInKB from Sys.tables t 
-								inner join sys.dm_db_xtp_table_memory_stats x on t.object_id= x.object_id and is_memory_optimized =1'
-					exec sp_executesql @sqlstmt
-					FETCH dbs INTO @db
-   					END
-					CLOSE dbs
-					DEALLOCATE dbs
-					SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, *, ('$RunDt') as DateAdded FROM ##tmpHekaton ORDER BY dbname
-					DROP TABLE ##tmpHekaton
-					END"
-				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-				$dt = new-object System.Data.DataTable
-				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
-				#Write-Log -Message "Collecting InMemory (Hekaton) Tables Info" -Level Info -Path $logPath
-				Write-Log -Message "Collecting InMemory (Hekaton) Tables Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath		
-        
-				$Task           = "Collecting InMemory (Hekaton) Tables Info"
-				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task					
-			}
-			catch 
-			{ 
-				$ex = $_.Exception 
-				write-log -Message "$ex.Message on $getServerName While Collecting Memory (Hekaton) Tables Info" -Level Error -NoConsoleOut -Path $logPath
-			}
-			finally
-			{
-				$ErrorActionPreference = "Stop"; #Reset the error action pref to default
-			}
+		#	try 
+		#	{
+		#		$ErrorActionPreference = "Stop"; #Make all errors terminating
+		#		$CITbl = "[Tbl].[HekatonTbls]"
+		#		$query= "IF SERVERPROPERTY ('IsXTPSupported') = 1
+		#			BEGIN
+		#			declare @db varchar(200), @sqlstmt nvarchar(4000)
+    	#				SET NOCOUNT ON   
+    	#				create table ##tmpHekaton(DBName SYSNAME, tblName SYSNAME, IsMemOptimized bit, Durability tinyint, 
+		#				DurabilityDesc nvarchar(60), MemAllocForIdxInKB bigint, MemAllocForTblInKB bigint, MemUsdByIdxInKB bigint,
+		#				MemUsdByTblInKB bigint);
+		#			DECLARE dbs CURSOR FOR
+		#			SELECT name FROM sys.databases --WHERE database_id > 4 and state = 0
+		#			OPEN dbs
+		#			FETCH dbs INTO @db
+		#			WHILE @@FETCH_STATUS = 0
+		#			BEGIN
+       	#				set @sqlstmt = N'USE ['+ @db +']; ' + ' insert into ##tmpHekaton
+		#						select DB_NAME() as DBname, t.name as HekatonTblName, t.Is_memory_optimized as IsMemOptimized, t.durability as Durability, t.durability_desc as DurabilityDesc,
+		#						x.memory_allocated_for_indexes_kb as MemAllocForIdxInKB, x.memory_allocated_for_table_kb as MemAllocForTblInKB,
+		#						x.memory_used_by_indexes_kb as MemUsdByIdxInKB, x.memory_used_by_table_KB as MemUsdByTblInKB from Sys.tables t 
+		#						inner join sys.dm_db_xtp_table_memory_stats x on t.object_id= x.object_id and is_memory_optimized =1'
+		#			exec sp_executesql @sqlstmt
+		#			FETCH dbs INTO @db
+   		#			END
+		#			CLOSE dbs
+		#			DEALLOCATE dbs
+		#			SELECT ('$getServerName') as ServerName, ('$getInstanceName') as InstanceName, *, ('$RunDt') as DateAdded FROM ##tmpHekaton ORDER BY dbname
+		#			DROP TABLE ##tmpHekaton
+		#			END"
+		#		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
+		#		$dt = new-object System.Data.DataTable
+		#		$da.fill($dt) | out-null
+		#		Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
+		#		#Write-Log -Message "Collecting InMemory (Hekaton) Tables Info" -Level Info -Path $logPath
+		#		Write-Log -Message "Collecting InMemory (Hekaton) Tables Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath		
+        #
+		#		$Task           = "Collecting InMemory (Hekaton) Tables Info"
+		#		DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task					
+		#	}
+		#	catch 
+		#	{ 
+		#		$ex = $_.Exception 
+		#		write-log -Message "$ex.Message on $getServerName While Collecting Memory (Hekaton) Tables Info" -Level Error -NoConsoleOut -Path $logPath
+		#	}
+		#	finally
+		#	{
+		#		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
+		#	}
 			#############################################################################################################################
 			
 			### DB Level Triggers Info ##################################################################################################
 			#http://msdn.microsoft.com/en-us/library/microsoft.sqlserver.management.smo.databaseddltrigger.aspx
-			try 
-			{
-				$CurrentStep = 21;$StepText = "Collecting Availability Replicas Info"; $Task = "Who wants a copy of this family picture?";
-				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task	
-				
-				$ErrorActionPreference = "Stop"; #Make all errors terminating
-				$CITbl = "[DB].[Triggers]"
-				$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
-				foreach ($db in $s.Databases) 
-				{
-					if ($db.IsAccessible -eq $True) 
-					{
-						[string]$nm = $db.Name
-						$dt = $db.Triggers | select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, @{Name="Database"; Expression = {$nm}}, Name, 
-						createdate, datelastmodified, IsEnabled, @{n="DateAdded";e={$RunDt}} |out-datatable
-						Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
-						#Write-Log -Message "Collecting DB Level Trigger Info $db" -Level Info -Path $logPath
-						Write-Log -Message "Collecting DB Level Trigger Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
-						
-						$Task           = "Collecting DB Level Trigger Info $db"
-						DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task							
-					}#end if
-				}#end foreach
-			}
-			catch 
-			{ 
-				$ex = $_.Exception 
-				write-log -Message "$ex.Message on $getServerName While Collecting DB Level Trigger Info" -Level Error -NoConsoleOut -Path $logPath
-			}
-			finally
-			{
-				$ErrorActionPreference = "Stop"; #Reset the error action pref to default
-			}
+		#	try 
+		#	{
+		#		$CurrentStep = 21;$StepText = "Collecting Availability Replicas Info"; $Task = "Who wants a copy of this family picture?";
+		#		DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task	
+		#		
+		#		$ErrorActionPreference = "Stop"; #Make all errors terminating
+		#		$CITbl = "[DB].[Triggers]"
+		#		$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
+		#		foreach ($db in $s.Databases) 
+		#		{
+		#			if ($db.IsAccessible -eq $True) 
+		#			{
+		#				[string]$nm = $db.Name
+		#				$dt = $db.Triggers | select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, @{Name="Database"; Expression = {$nm}}, Name, 
+		#				createdate, datelastmodified, IsEnabled, @{n="DateAdded";e={$RunDt}} |out-datatable
+		#				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
+		#				#Write-Log -Message "Collecting DB Level Trigger Info $db" -Level Info -Path $logPath
+		#				Write-Log -Message "Collecting DB Level Trigger Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
+		#				
+		#				$Task           = "Collecting DB Level Trigger Info $db"
+		#				DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task							
+		#			}#end if
+		#		}#end foreach
+		#	}
+		#	catch 
+		#	{ 
+		#		$ex = $_.Exception 
+		#		write-log -Message "$ex.Message on $getServerName While Collecting DB Level Trigger Info" -Level Error -NoConsoleOut -Path $logPath
+		#	}
+		#	finally
+		#	{
+		#		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
+		#	}
 			#############################################################################################################################
 			
 			### Availability Groups Info ################################################################################################
@@ -1668,7 +1755,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Availability Groups Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Availability Groups Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 
@@ -1709,7 +1796,7 @@ ConvertFrom-StringData -StringData @'
 				$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Availability Databases Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Availability Databases Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 
@@ -1750,7 +1837,7 @@ ConvertFrom-StringData -StringData @'
 				$dt = new-object System.Data.DataTable
 				$da.fill($dt) | out-null
 
-				Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+				Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 				#Write-Log -Message "Collecting Availability Replicas Info" -Level Info -Path $logPath
 				#Write-Log -Message "Collecting Availability Replicas Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1789,11 +1876,13 @@ ConvertFrom-StringData -StringData @'
 		if ($responds) 
 		{
 			$CITbl="[RS].[SSRSInfo]"
-			$name = $getInstanceName.Split("\")
-			if ($name.Length -eq 1) { $getInstanceName = "MSSQLSERVER" } else { $getInstanceName = $name[1]}			
-			$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
-			
-			$rs_namespace = GetRSNameSpace $s.Version $getInstanceName
+			#$name = $getInstanceName.Split("\")
+			#if ($name.Length -eq 1) { $getInstanceName = "MSSQLSERVER" } else { $getInstanceName = $name[1]}			
+			$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName			
+			$wmi_rsNameSpace = Get-WmiObject -class "__NAMESPACE" -namespace "root\Microsoft\SqlServer\ReportServer" -computername $getServerName
+			$rs_namespace = "root\Microsoft\SqlServer\ReportServer\" + $wmi_rsNameSpace.Name + "\v" + $s.Version.Major
+						
+			#$rs_namespace = GetRSNameSpace $s.Version $getInstanceName
 			$version = GetVersion($s.Version)
 			$edition = GetEdition($s.EditionName)
 
@@ -1802,7 +1891,7 @@ ConvertFrom-StringData -StringData @'
 				@{n="RSEdition";e={$edition}},
 				@{n="RSVersionNo";e={if($_.Version -eq $null) {'9.0'} else { $_.Version }}}, 
 				IsSharePointIntegrated, @{n="DateAdded";e={$RunDt}} | out-datatable
-			Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+			Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 			#Write-Log -Message "Collecting Reporting server Info" -Level Info -Path $logPath
 			#Write-Log -Message "Collecting Reporting server Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath	
 
@@ -1811,13 +1900,15 @@ ConvertFrom-StringData -StringData @'
 		
 			$CITbl="[RS].[SSRSConfig]"
 			$s = New-Object ('Microsoft.SqlServer.Management.Smo.Server') $getInstanceName
-			$rs_namespace = GetRSNameSpaceAdmin $s.Version $getInstanceName
+			$wmi_rsNameSpace = Get-WmiObject -class "__NAMESPACE" -namespace "root\Microsoft\SqlServer\ReportServer" -computername $getServerName
+			$rs_namespace = "root\Microsoft\SqlServer\ReportServer\" + $wmi_rsNameSpace.Name + "\v" + $s.Version.Major + "\Admin"	
+			#$rs_namespace = GetRSNameSpaceAdmin $s.Version $getInstanceName
 			$dt = Get-WmiObject -class MSReportServer_ConfigurationSetting -namespace $rs_namespace -computername $getServerName | select @{n="ServerName";e={$getServerName}}, @{n="InstanceName1";e={$getInstanceName}}, 
 				DatabaseServerName, InstanceName, PathName, DatabaseName, DatabaseLogonAccount, DatabaseLogonTimeout,
 				DatabaseQueryTimeout, ConnectionPoolSize,  IsInitialized, IsReportManagerEnabled, IsSharePointIntegrated, 
 				IsWebServiceEnabled, IsWindowsServiceEnabled, SecureConnectionLevel, SendUsingSMTPServer,SMTPServer, 
 				SenderEmailAddress, UnattendedExecutionAccount, ServiceName, WindowsServiceIdentityActual, @{n="DateAdded";e={$RunDt}} | out-datatable
-			Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+			Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 			#Write-Log -Message "Collecting Reporting server Config Info" -Level Info -Path $logPath
 			#Write-Log -Message "Collecting Reporting server config Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1861,7 +1952,7 @@ ConvertFrom-StringData -StringData @'
 
 			$CITbl="[AS].[SSASInfo]"
 			$dt =  $s | Select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}}, ProductName, @{n="SQLASVersion";e={$SQLASVersion}}, ProductLevel, @{n="IsSPUpToDateOnAS";e={$IsSPUpToDateOnAS}},@{n="SQLASEdition";e={$SQLASEdition}}, Version, @{n="NoOfDBs";e={($_.Databases.Count)}}, LastSchemaUpdate, Connected, IsLoaded, @{n="DateAdded";e={$RunDt}} | out-datatable
-			Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+			Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 			#Write-Log -Message "Collecting Analysis server Info" -Level Info -Path $logPath
 			#Write-Log -Message "Collecting Analysis server Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1870,7 +1961,7 @@ ConvertFrom-StringData -StringData @'
 			
 			$CITbl="[AS].[SSASDBInfo]"
 			$dt =  $s.Databases | Select @{n="ServerName";e={$getServerName}}, @{n="InstanceName";e={$getInstanceName}},  Name, @{Expression={$_.EstimatedSize / 1MB};Label="DBSizeInMB"}, Collation, CompatibilityLevel, CreatedTimestamp, LastProcessed, LastUpdate, DBStorageLocation, @{n="NoOfCubes";e={($_.Cubes.Count)}},  @{n="NoOfDimensions";e={($_.Dimensions.Count)}}, ReadWriteMode, StorageEngineUsed, Visible, @{n="DateAdded";e={$RunDt}} | out-datatable
-			Write-DataTable -InstanceName $cmsInstanceName -DatabaseName $cmsDatabaseName -TableName $CITbl -Data $dt
+			Write-DataTable -InstanceName $InstanceName -DatabaseName $DatabaseName -TableName $CITbl -Data $dt
 			#Write-Log -Message "Collecting Analysis server database Info" -Level Info -Path $logPath
 			#Write-Log -Message "Collecting Analysis server database Info Elapsed Time: $($ElapsedTime.Elapsed.ToString())" -Path $logPath
 
@@ -1892,8 +1983,7 @@ ConvertFrom-StringData -StringData @'
 		$ErrorActionPreference = "Stop"; #Reset the error action pref to default
 	}
 	#############################################################################################################################
-}
-#GetServerListInfo
+} 
 ######################################################################################################################################
 
 ######################################################################################################################################
@@ -1917,9 +2007,12 @@ try
 	# Getting the Server List Data
 	$CurrentStep = 2;$StepText = "Gathering Server List Data"; $Task = "Finding the punch bowl...";
 	DisplayProgress -TotalSteps $TotalSteps -CurrentStep $CurrentStep -Activity $Activity -StepText $StepText -Task $Task
-	## Login parameters will need to be defined
-	$cn = new-object system.data.sqlclient.sqlconnection("server=$cmsInstanceName;database=$cmsDatabaseName;Integrated Security=true;");
-	$cn.Open(); $cmd = $cn.CreateCommand()	
+	
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    ## Login parameters will need to be defined
+	$cn = new-object system.data.sqlclient.sqlconnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;Pooling=True");
+	$cn.Open(); $cmd = $cn.CreateCommand()
 	
 	##This needs to be updated to no longer connect to server list table... if it is locally run.
 	if ($runLocally -eq "true"){$query = "Select Distinct ServerName, InstanceName from [Svr].[ServerList] where Inventory='True' and ServerName = '$env:computername';"}
@@ -1940,13 +2033,18 @@ try
 		if ($getInstanceName -match "\\") {$SQLServerConnection = $getInstanceName} 
         elseif ($getInstanceName.length -eq 0) {$SQLServerConnection = $getServerName; $getInstanceName = $getServerName}
         else {$SQLServerConnection = $getServerName + "\" +  $getInstanceName}	
-		$res = new-object Microsoft.SqlServer.Management.Common.ServerConnection($SQLServerConnection)
-		$responds = $false            
-		if ($res.ProcessID -ne $null) 
-		{
-			$responds = $true
-			$res.Disconnect()
-		}
+		            
+        try
+        {
+            $localServerConn = new-object system.data.sqlclient.sqlconnection("server=$SQLServerConnection;database=$getDatabaseName;Integrated Security=true;Pooling=True");
+            $localServerConn.Open();
+            $responds = $true
+            $localServerConn.Close();
+        }
+        catch
+        {
+            $responds = $false 
+        }
 
 		If ($responds) 
 		{
@@ -1957,7 +2055,7 @@ try
 			# Calling function and passing server and instance parameters
 			GetServerListInfo $getServerName $getInstanceName $getDatabaseName
 			
-			$cnUpdate = new-object system.data.sqlclient.sqlconnection("server=$cmsInstanceName;database=$cmsDatabaseName;Integrated Security=true;");
+			$cnUpdate = new-object system.data.sqlclient.sqlconnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;");
 			$cnUpdate.Open()
 			$cmdUpdate = $cnUpdate.CreateCommand()
 			$queryUpdate = "UPDATE [Svr].[ServerList] SET [InventoryLastExecDate] = SYSDATETIME() WHERE Inventory='True' and ServerName = '$env:computername';"
@@ -1976,7 +2074,7 @@ try
 	###################################################################Delete old data#################################################################
 	if ($runLocally -ne "true")
 	{
-		$cn = new-object system.data.SqlClient.SqlConnection("server=$cmsInstanceName;database=$cmsDatabaseName;Integrated Security=true;");
+		$cn = new-object system.data.SqlClient.SqlConnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;");
 		$cn.Open()
 		$cmd = $cn.CreateCommand()
 		$q = "exec [dbo].[usp_DelData]"
@@ -2000,7 +2098,6 @@ catch
 	$ex = $_.Exception 
 	write-log -Message "$ex.Message on $getServerName excuting script Get-Inventory.ps1" -Level Error -Path $logPath 
 }
-#Execute Script
 ######################################################################################################################################
 
 ###################################################################################################################################

@@ -317,45 +317,6 @@ function GetServerListInfo($svr, $inst)
 	$s = new-object ('Microsoft.SqlServer.Management.Smo.Server') $cn
 	$RunDt = Get-Date -format G
 
-	### Missing Indexes #############################################################################################################
-	try 
-	{ 
-		$ErrorActionPreference = "Stop"; #Make all errors terminating
-		$CITbl = "[Inst].[MissingIndexes]"
-		$query= "Select ('$Svr') as ServerName, ('$inst') as InstanceName, DB_Name(mid.database_id) as DBName, OBJECT_SCHEMA_NAME(mid.[object_id], mid.database_id) as SchemaName, 
-			mid.statement as MITable,migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) AS improvement_measure, 
-		  'CREATE INDEX [IDX'
-		  + '_' + LEFT (PARSENAME(mid.statement, 1), 32) + ']'
-		  + ' ON ' + mid.statement 
-		  + ' (' + ISNULL (mid.equality_columns,'') 
-			+ CASE WHEN mid.equality_columns IS NOT NULL AND mid.inequality_columns IS NOT NULL THEN ',' ELSE '' END 
-			+ ISNULL (mid.inequality_columns, '')
-		  + ')' 
-		  + ISNULL (' INCLUDE (' + mid.included_columns + ')', '') AS create_index_statement,
-		  migs.group_handle, migs.unique_compiles, migs.user_seeks, migs.last_user_seek, migs.avg_total_user_cost, migs.avg_user_impact, ('$RunDt') as DateAdded
-		FROM sys.dm_db_missing_index_groups mig
-		INNER JOIN sys.dm_db_missing_index_group_stats migs ON migs.group_handle = mig.index_group_handle
-		INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
-		WHERE migs.avg_total_user_cost * (migs.avg_user_impact / 100.0) * (migs.user_seeks + migs.user_scans) > 100000
-		ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC"
-
-		$da = new-object System.Data.SqlClient.SqlDataAdapter ($query, $cn)
-		$dt = new-object System.Data.DataTable
-		$da.fill($dt) | out-null
-		Write-DataTable -ServerInstance $InstanceName -Database $DatabaseName -TableName $CITbl -Data $dt
-		write-log -Message "Collecting Missing Index Info" -Level Info -Path $logPath
-	}    
-	catch 
-	{ 
-		$ex = $_.Exception 
-		write-log -Message "$ex.Message on $Svr While Collecting Missing Index Info" -Level Warn -Path $logPath 
-	} 
-	finally
-	{
-   		$ErrorActionPreference = "Continue"; #Reset the error action pref to default
-	}
-	#################################################################################################################################
-
 	### Wait Stats ##################################################################################################################
 	try
 	{
@@ -452,6 +413,16 @@ try
 		{
 			# Calling funtion and passing server and instance parameters
 			GetServerListInfo $server $instance 
+			
+			$cnUpdate = new-object system.data.sqlclient.sqlconnection("server=$InstanceName;database=$DatabaseName;Integrated Security=true;");
+			$cnUpdate.Open()
+			$cmdUpdate = $cnUpdate.CreateCommand()
+			$queryUpdate = "UPDATE [Svr].[ServerList] SET [WaitStatLastExecDate] = SYSDATETIME() WHERE Baseline='True' and ServerName = '$env:computername';"
+			$cmdUpdate.CommandText = $queryUpdate
+			$adUpdate = New-Object system.data.sqlclient.sqldataadapter ($cmdUpdate.CommandText, $cnUpdate)
+			$dsUpdate = New-Object system.data.dataset
+			$adUpdate.Fill($dsUpdate)
+			$cnUpdate.Close()			
 		}
 		else 
 		{
