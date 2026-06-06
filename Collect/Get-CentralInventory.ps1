@@ -825,12 +825,37 @@ function Get-CentralInventory {
                 }
 
                 # -- Missing Indexes ------------------------------------------
+                # Get-DbaDbMissingIndex does not exist in dbatools.
+                # Query sys.dm_db_missing_index_* DMVs directly via Invoke-DbaQuery.
                 try {
-                    $missingIdx = Get-DbaDbMissingIndex -SqlInstance $instance @credParam -EnableException
-                    $idxRows    = $missingIdx | Select-Object `
+                    $missingIdxQuery =
+                        "SELECT DB_NAME(mid.database_id) AS DatabaseName, " +
+                        "OBJECT_SCHEMA_NAME(mid.object_id, mid.database_id) AS SchemaName, " +
+                        "OBJECT_NAME(mid.object_id, mid.database_id) AS TableName, " +
+                        "mid.equality_columns AS EqualityColumns, " +
+                        "mid.inequality_columns AS InequalityColumns, " +
+                        "mid.included_columns AS IncludedColumns, " +
+                        "CAST(migs.avg_user_impact AS DECIMAL(5,2)) AS AvgUserImpact, " +
+                        "migs.user_seeks AS UserSeeks, " +
+                        "migs.user_scans AS UserScans, " +
+                        "migs.last_user_seek AS LastUserSeek " +
+                        "FROM sys.dm_db_missing_index_details mid " +
+                        "JOIN sys.dm_db_missing_index_groups mig " +
+                        "    ON mid.index_handle = mig.index_handle " +
+                        "JOIN sys.dm_db_missing_index_group_stats migs " +
+                        "    ON mig.index_group_handle = migs.group_handle " +
+                        "WHERE mid.database_id > 4 " +
+                        "ORDER BY migs.avg_user_impact DESC"
+
+                    $missingIdx = Invoke-DbaQuery -SqlInstance $instance -Database master @credParam `
+                        -Query $missingIdxQuery -CommandTimeout $CommandTimeout -EnableException
+
+                    $idxRows = $missingIdx | Select-Object `
                         @{ n = 'ServerName';      e = { $hostName } },
                         @{ n = 'InstanceName';    e = { $instance } },
-                        DatabaseName, SchemaName, TableName,
+                        @{ n = 'DatabaseName';    e = { $_.DatabaseName } },
+                        @{ n = 'SchemaName';      e = { $_.SchemaName } },
+                        @{ n = 'TableName';       e = { $_.TableName } },
                         @{ n = 'EqualityColumns'; e = { $_.EqualityColumns } },
                         @{ n = 'InEqualColumns';  e = { $_.InequalityColumns } },
                         @{ n = 'IncludedColumns'; e = { $_.IncludedColumns } },
@@ -934,7 +959,9 @@ function Get-CentralInventory {
                 }
                 else {
                     try {
-                        $ssrsInfo = Get-DbaReportingService -ComputerName $hostName -EnableException
+                        # Get-DbaReportingService does not exist in dbatools.
+                        # Use Get-DbaService -Type SSRS (ValidateSet value is 'SSRS').
+                        $ssrsInfo = Get-DbaService -ComputerName $hostName -Type SSRS -EnableException
                         if ($ssrsInfo) {
                             $ssrsRows = $ssrsInfo | Select-Object `
                                 @{ n = 'ServerName';          e = { $hostName } },
