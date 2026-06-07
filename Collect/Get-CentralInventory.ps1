@@ -394,7 +394,7 @@ function Get-CentralInventory {
                     -CommandTimeout $CommandTimeout `
                     @credParam      -EnableException
                 if ($platResult.Ver -match 'Linux') { $isWindows = $false }
-                Write-DbaLog "Platform: $($isWindows ? 'Windows' : 'Linux')"
+                Write-DbaLog "Platform: $(if ($isWindows) { 'Windows' } else { 'Linux' })"
             }
             catch {
                 $msg = "Platform detection failed for $($instance) - $($_.Exception.Message)"
@@ -415,19 +415,19 @@ function Get-CentralInventory {
                 else {
                     # -- OS Info -----------------------------------------------
                     try {
-                        $osData = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $hostName -ErrorAction Stop
-                        $lastBoot = New-TimeSpan -Start ($osData.LastBootUpTime) -End (Get-Date)
+                        $osData = Get-DbaOperatingSystem -ComputerName $hostName -EnableException
+                        $lastBoot = New-TimeSpan -Start ($osData.LastBootTime) -End (Get-Date)
                         $uptime   = '{0} Days, {1} Hrs' -f $lastBoot.Days, $lastBoot.Hours
 
                         $osRows = $osData | Select-Object `
                             @{ n = 'ServerName';   e = { $hostName } },
-                            @{ n = 'OSName';       e = { $_.Caption } },
+                            @{ n = 'OSName';       e = { $_.OSVersion } },
                             @{ n = 'OSVersion';    e = { $_.Version } },
-                            @{ n = 'OSBuildNo';    e = { $_.BuildNumber } },
-                            @{ n = 'ServicePack';  e = { $_.ServicePackMajorVersion } },
-                            @{ n = 'OSArchitect';  e = { $_.OSArchitecture } },
+                            @{ n = 'OSBuildNo';    e = { $_.Build } },
+                            @{ n = 'ServicePack';  e = { $_.SPVersion } },
+                            @{ n = 'OSArchitect';  e = { $_.Architecture } },
                             @{ n = 'UpTimeHrs';    e = { $uptime } },
-                            @{ n = 'LastBootTime'; e = { $_.LastBootUpTime } },
+                            @{ n = 'LastBootTime'; e = { $_.LastBootTime } },
                             @{ n = 'LoadGUID';     e = { $runGUID } },
                             @{ n = 'CollectedAt';  e = { $collectedAt } }
 
@@ -439,7 +439,7 @@ function Get-CentralInventory {
 
                     # -- OS Patches -------------------------------------------
                     try {
-                        $patches = Get-CimInstance -ClassName Win32_QuickFixEngineering -ComputerName $hostName -ErrorAction Stop
+                        $patches = Get-DbaInstalledPatch -ComputerName $hostName -EnableException
                         $patchRows = $patches | Select-Object `
                             @{ n = 'ServerName';  e = { $hostName } },
                             Caption, Description, HotFixID, InstalledBy, InstalledOn,
@@ -454,10 +454,10 @@ function Get-CentralInventory {
 
                     # -- Page File --------------------------------------------
                     try {
-                        $pgFile = Get-CimInstance -ClassName Win32_PageFileUsage -ComputerName $hostName -ErrorAction Stop
+                        $pgFile = Get-DbaPageFileSetting -ComputerName $hostName -EnableException
                         $pgRows = $pgFile | Select-Object `
                             @{ n = 'ServerName';          e = { $hostName } },
-                            Name,
+                            @{ n = 'Name';                e = { $_.FileName } },
                             @{ n = 'PgAllocBaseSzInGB';   e = { [math]::Round($_.AllocatedBaseSize / 1024, 2) } },
                             @{ n = 'PgCurrUsageInGB';     e = { [math]::Round($_.CurrentUsage     / 1024, 2) } },
                             @{ n = 'PgPeakUsageInGB';     e = { [math]::Round($_.PeakUsage        / 1024, 2) } },
@@ -683,6 +683,43 @@ function Get-CentralInventory {
                 }
                 catch {
                     Write-DbaLog "[Instance][Jobs] $($instance) - $($_.Exception.Message)" -Level WARN
+                }
+
+                # -- sp_configure ---------------------------------------------
+                try {
+                    $spConfig = Get-DbaSpConfigure -SqlInstance $instance @credParam -EnableException
+                    $cfgRows  = $spConfig | Select-Object `
+                        @{ n = 'ServerName';      e = { $hostName } },
+                        @{ n = 'InstanceName';    e = { $instance } },
+                        @{ n = 'ConfigName';      e = { $_.DisplayName } },
+                        @{ n = 'ConfiguredValue'; e = { $_.ConfiguredValue } },
+                        @{ n = 'RunningValue';    e = { $_.RunningValue } },
+                        @{ n = 'MinValue';        e = { $_.MinValue } },
+                        @{ n = 'MaxValue';        e = { $_.MaxValue } },
+                        @{ n = 'Description';     e = { $_.Description } },
+                        @{ n = 'LoadGUID';        e = { $runGUID } },
+                        @{ n = 'CollectedAt';     e = { $collectedAt } }
+
+                    Write-ToCms -Data $cfgRows -Table '[Inst].[SpConfigure]' -Section 'Instance'
+                }
+                catch {
+                    Write-DbaLog "[Instance][SpConfigure] $($instance) - $($_.Exception.Message)" -Level WARN
+                }
+
+                # -- Instance Triggers ----------------------------------------
+                try {
+                    $triggers = Get-DbaInstanceTrigger -SqlInstance $instance @credParam -EnableException
+                    $trigRows = $triggers | Select-Object `
+                        @{ n = 'ServerName';    e = { $hostName } },
+                        @{ n = 'InstanceName';  e = { $instance } },
+                        Name, IsEnabled, IsSystemObject, CreateDate,
+                        @{ n = 'LoadGUID';      e = { $runGUID } },
+                        @{ n = 'CollectedAt';   e = { $collectedAt } }
+
+                    Write-ToCms -Data $trigRows -Table '[Inst].[InstanceTriggers]' -Section 'Instance'
+                }
+                catch {
+                    Write-DbaLog "[Instance][InstanceTriggers] $($instance) - $($_.Exception.Message)" -Level WARN
                 }
 
                 $sectionsDone.Add('Instance')
