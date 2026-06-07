@@ -308,10 +308,9 @@ function Invoke-CentralIntegrityCheck {
 
                 # Phase 2: Verify DatabaseIntegrityCheck exists
                 $stepName  = "Verify DatabaseIntegrityCheck on $instance"
-                $procCheck = Invoke-DbaQuery -SqlInstance $instance -Database $OlaDatabase `
-                    -Query "SELECT COUNT(1) AS Cnt FROM sys.objects WHERE name = 'DatabaseIntegrityCheck' AND type = 'P'" `
-                    -CommandTimeout 60 @credParam -EnableException
-                if ($procCheck.Cnt -eq 0) {
+                $procCheck = Get-DbaDbStoredProcedure -SqlInstance $instance -Database $OlaDatabase `
+                    -Name 'DatabaseIntegrityCheck' @credParam -EnableException
+                if (-not $procCheck) {
                     Write-DbaLog "[Integrity] DatabaseIntegrityCheck not found on $instance.$OlaDatabase. Use -DeployOla Y." -Level WARN
                     $Script:Results.Add([PSCustomObject]@{ PSTypeName='CentralDB.IntegrityResult'; SqlInstance=$instance; RowsCollected=0; LoadGUID=$runGUID; CollectedAt=$collectedAt; Status='Skipped'; ErrorMessage="DatabaseIntegrityCheck not found on $OlaDatabase" })
                     continue

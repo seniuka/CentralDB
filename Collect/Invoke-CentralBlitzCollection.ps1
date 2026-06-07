@@ -448,14 +448,10 @@ function Invoke-CentralBlitzCollection {
                 #region Phase 2: Verify sp_Blitz exists
                 # =============================================================
                 $stepName  = "Verify sp_Blitz on $instance"
-                $spExists  = Invoke-DbaQuery `
-                    -SqlInstance    $instance `
-                    -Database       $FRKDatabase `
-                    -Query          "SELECT COUNT(1) AS Cnt FROM sys.objects WHERE name = 'sp_Blitz' AND type = 'P'" `
-                    -CommandTimeout $CommandTimeout `
-                    @credParam      -EnableException
+                $spExists  = Get-DbaDbStoredProcedure -SqlInstance $instance -Database $FRKDatabase `
+                    -Name 'sp_Blitz' @credParam -EnableException
 
-                if ($spExists.Cnt -eq 0) {
+                if (-not $spExists) {
                     Write-DbaLog "[Blitz] sp_Blitz not found on $instance.$FRKDatabase. Set -DeployFRK Y to install it." -Level WARN
                     $Script:Results.Add([PSCustomObject]@{
                         PSTypeName    = 'CentralDB.BlitzResult'

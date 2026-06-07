@@ -324,10 +324,9 @@ function Invoke-CentralIndexOptimize {
 
                 # Phase 2: Verify IndexOptimize exists
                 $stepName  = "Verify IndexOptimize on $instance"
-                $procCheck = Invoke-DbaQuery -SqlInstance $instance -Database $OlaDatabase `
-                    -Query "SELECT COUNT(1) AS Cnt FROM sys.objects WHERE name = 'IndexOptimize' AND type = 'P'" `
-                    -CommandTimeout 60 @credParam -EnableException
-                if ($procCheck.Cnt -eq 0) {
+                $procCheck = Get-DbaDbStoredProcedure -SqlInstance $instance -Database $OlaDatabase `
+                    -Name 'IndexOptimize' @credParam -EnableException
+                if (-not $procCheck) {
                     Write-DbaLog "[Index] IndexOptimize not found on $instance.$OlaDatabase. Use -DeployOla Y." -Level WARN
                     $Script:Results.Add([PSCustomObject]@{ PSTypeName='CentralDB.IndexResult'; SqlInstance=$instance; RowsCollected=0; LoadGUID=$runGUID; CollectedAt=$collectedAt; Status='Skipped'; ErrorMessage="IndexOptimize not found on $OlaDatabase" })
                     continue
