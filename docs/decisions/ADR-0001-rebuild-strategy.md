@@ -14,7 +14,7 @@ The current repository (`seniuka/CentralDB`, a fork of `CrazyDBA/CentralDB`) `VE
 
 - Schemas in the create script: `AS`, `DB`, `FRK`, `IS`, `Inst`, `RS`, `Svr`, `Tbl`, plus four `dbo` tables.
 - Seven `Collect/*.ps1` scripts built on dbatools, run as SQL Agent CmdExec steps with a dual-block shape, targets from CMS and `Svr.ServerList`.
-- Fifteen `*Current` views in `SQL/Views/CurrentState.Views.sql` and a set of SSRS `.rdl` reports.
+- On `master`: 42 views in the create script (all `dbo`, for example `dbo.vwGETInstanceInfoCurrent`) and 41 SSRS `.rdl` reports in one report project. The unmerged branch `feature/current-state-views` adds 15 more `*Current` views in `SQL/Views/CurrentState.Views.sql`; that branch is not part of this work.
 - No `CLAUDE.md`, no `.claude/` folder, no tests beyond two manual scripts.
 - The v4.1.0 PowerShell guidelines, not v5.0.0.
 

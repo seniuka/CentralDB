@@ -20,7 +20,7 @@ Check each item and mark it OK, BLOCKING or ADVISE with file and line:
 7. Connections: integrated authentication or gMSA context only; no credential parameters except under a documented exception; no `-TrustServerCertificate`; no connection strings with secrets.
 8. Write-back: data goes to the staging schema through `Write-DbaDbTableData` and a set-based merge; no row-by-row inserts in a loop.
 9. Air-gapped: no `Install-Module`, `Find-Module`, `Invoke-WebRequest` or `Invoke-RestMethod` to the internet, no package downloads at runtime. Module use is `Import-Module` from the UNC PSRepository.
-10. Target guard: any script that takes a target refuses one not on the allow-list pattern in the plan card.
+10. Safety default: a script that changes a target needs `-Apply` and `ShouldProcess`; without them it only reports. The non-production allow-list is enforced by the slash commands, not hard-coded in scripts, because approved production runs happen through the runbook. A script that embeds a server list or an allow-list is ADVISE at best and a deny-list R9 hit at worst.
 11. Deny-list: no pattern from `docs/deny-list.md` appears (R1, R2, R3, R6, R8, R9, R10, R11 especially).
 12. Docs: a `docs/scripts/<Name>.md` exists and lists every impacted doc.
 13. File header present: name, purpose, version, standard version, author, date.

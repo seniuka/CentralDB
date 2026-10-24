@@ -22,7 +22,7 @@ The brief refers to objects that are not in `seniuka/CentralDB` as cloned on 202
 |---|---|---|
 | Sliding-window partitioning "already used for `Inst.CommandLog`" | `Inst.CommandLog` is a plain table: primary key `(CommandLogID, CommandType)`, `StartTime datetime`, filegroup `[Inst]`, no partition function | `VERIFIED 2026-10-24` (read `CreateScript-NewCentralDB-Database.sql`) |
 | `cache.JsonStore`, `cache.QueryRegistry` | zero matches in the repo | `VERIFIED 2026-10-24` (repo search) |
-| `vwGETAGReplicasInfoCurrent` | zero matches; `vwGetInstanceInfoCurrent` exists as `Inst.vwGetInstanceInfoCurrent` | `VERIFIED 2026-10-24` |
+| `vwGETAGReplicasInfoCurrent` | zero matches (case-insensitive). `vwGetInstanceInfoCurrent` exists as `dbo.vwGETInstanceInfoCurrent` on `master`, and as `Inst.vwGetInstanceInfoCurrent` on the unmerged `feature/current-state-views` branch | `VERIFIED 2026-10-24` |
 | Schemas `AG`, `Backup`, `Security`, `Audit`, `cache` | not in the create script (schemas present: `AS`, `DB`, `FRK`, `IS`, `Inst`, `RS`, `Svr`, `Tbl`, plus `dbo`) | `VERIFIED 2026-10-24` |
 
 ## 3. Database engine candidates
@@ -68,7 +68,7 @@ Evidence for E1 to E9 and the table above is in section 7.
 | A4 | Idempotent, `-Apply`-gated setup of the Agent jobs that run the collectors | Hand-run `sp_add_job` scripts in `docs/SQL-AGENT-JOBS.md` | Repeatable, reviewable job setup | Token syntax in the job step needs checking against current docs | S | Job installer from the skill; `/cdb-test` | 4+5-1 = 8 | adopt |
 | A5 | Pester tests and a repeatable synthetic dataset | Two manual test scripts in `Tests/` | Regression safety; no real inventory in fixtures | Only Pester 3.4.0 is installed on the author's workstation; Pester 5 must come from the UNC PSRepository | M | Pester 5 `DECISION`; synthetic data generator | 4+5-2 = 7 | adopt after Pester 5 is supplied |
 | A6 | Azure Arc SQL extension state and gMSA state as inventoried attributes | No record of either today | Shows readiness for Entra authentication and managed-identity backups (both need Arc) | Method to collect the state is not chosen | S | Attribute design in `inst-core`; collection method | 3+3-1 = 5 | pilot |
-| A7 | Reporting layer: versioned views contract for SSRS and the web reporting app | The 15 legacy `*Current` views and the `.rdl` reports (deletion proposed, not done) | Stable, documented consumer contract | Report tooling choice is open | M | `/cdb-views`; consumer list; reporting-tool `DECISION` | 5+5-2 = 8 | adopt |
+| A7 | Reporting layer: versioned views contract for SSRS and the web reporting app | The 42 legacy `dbo` views and 41 `.rdl` reports (deletion proposed, not done) | Stable, documented consumer contract | Report tooling choice is open | M | `/cdb-views`; consumer list; reporting-tool `DECISION` | 5+5-2 = 8 | adopt |
 
 ## 5. Claude Code workflow candidates
 
