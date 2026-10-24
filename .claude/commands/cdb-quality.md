@@ -15,7 +15,7 @@ Steps:
 
 1. Collect the unit's files from the plan card's Output section, plus their docs.
 2. Call the `cdb-deny-list-scanner` agent on those files. It returns a table of hits per deny-list row with file and line. Any hit fails the gate. There is no waiver inside this command. A waiver is a G2 decision with an exception recorded in an ADR.
-3. Conformance: check the files against DBA Automation Engineering Standard v5.0.0. The v5.0.0 text is not in this repo (only v4.1.0 is). Until the user supplies it, every conformance line is tagged UNVERIFIED and checked against the brief's constraints instead (PowerShell 5.1 floor and 7.2+ support, `Verb-Dbt*` names, `[DbaInstanceParameter]`, single-block shape with dual-block only for CmdExec, `-Apply` gating, `-ThrottleLimit` with a 5.1 fallback, file headers).
+3. Conformance: check the files against DBA Automation Engineering Standard v5.0.0. The v5.0.0 text is not in this repo (only v4.1.0 is). Until the user supplies it, every conformance line is tagged UNVERIFIED and checked against the brief's constraints instead (PowerShell 5.1 floor and 7.2+ support, `Verb-Dbt*` names, `[DbaInstanceParameter]`, single-block shape with dual-block only for CmdExec, `-Apply` gating, `-ThrottleLimit` with a 5.1 fallback, file headers) and the prose rules in `docs/deny-list.md` section 5.
 4. Score out of 100 and record the rubric used:
    - Safety (gating, guards, no secrets, no production target): 30
    - Standard and constraint conformance: 25

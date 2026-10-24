@@ -30,7 +30,7 @@ Patterns are .NET regular expressions, case-insensitive, matched per line unless
 
 **Exempt files.** This file and `.claude/agents/cdb-deny-list-scanner.md`. Nothing else is exempt.
 
-**Legacy code.** Files outside the rebuild (`Collect/`, `SQL/`, `CentralDB/`, `CentralDB_Reports/`, `Original/`, `OlaHallengren/`, `Tests/Test-*.ps1`) are not scanned for gating. `/cdb-discover` reports their hits as BASELINE in `docs/rebuild/discovery/legacy-baseline.md`.
+**Legacy code.** Files outside the rebuild (`Collect/`, `SQL/`, `CentralDB/`, `CentralDB_Reports/`, `Original/`, `OlaHallengren/`, `Tests/Test-*.ps1`, and verbatim legacy copies such as `docs/legacy-*.md`) are not scanned for gating. `/cdb-discover` reports their hits as BASELINE in `docs/rebuild/discovery/legacy-baseline.md`.
 
 **Apply block.** For PowerShell, code that executes only when `$Apply` is true, or inside `if ($PSCmdlet.ShouldProcess(...))` whose parent function has `-Apply` defaulting to off. For T-SQL, a file named `*.rollback.sql` or `*.apply.sql`. Those files are executed only by a wrapper that refuses to run them without `-Apply`. Statements in any other `.sql` file are outside an Apply block. `CREATE OR ALTER` is preferred over `DROP ... ; CREATE`.
 
@@ -50,3 +50,9 @@ The scanner returns one table with all eleven rows, including rows with no hits:
 |---|---|---|---|
 
 Verdict: PASS only if the Hits column is zero in every row.
+
+## 5. Prose rules (checked by /cdb-quality, not part of the eleven rows)
+
+- No em dashes in generated prose.
+- Do not use the words "simply" or "easy" (including "easily"). This section is exempt because it has to name them.
+- Unchecked facts carry UNVERIFIED; open calls carry DECISION; checked facts carry VERIFIED with a date.

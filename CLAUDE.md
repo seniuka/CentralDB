@@ -1,3 +1,5 @@
+<!-- Name: CLAUDE.md | Purpose: project memory for Claude Code, CentralDB rebuild | Version: 0.1.0 | Standard: v5.0.0 (UNVERIFIED, text not in repo) | Author: Your Friendly Neighbourhood DBA | Date: 2026-10-24 -->
+
 # CLAUDE.md
 
 Project memory for Claude Code in this repository. This file did not exist before the rebuild scaffold, so it starts with the section below. Add other sections under their own headings; do not rewrite this one without the user's say-so.
@@ -29,7 +31,7 @@ Topology being built (ADR-0001): Tier 0 targets (SQL Server all supported versio
 - PowerShell 5.1 floor, 7.2+ supported. Functions `Verb-Dbt*`, CentralDB-facing `Verb-DbtCentralDb<Noun>`, `[DbaInstanceParameter]` for instances, single-block primary, dual-block only for SQL Agent CmdExec, `ForEach-Object -Parallel` only through the dual-path with `-ThrottleLimit` and a 5.1 fallback.
 - Do not guess dbatools parameters, SQL Server behavior or Claude Code conventions. Verify, or tag `UNVERIFIED`.
 - Human gates are real stops: print the decision needed and end. Never merge a pull request.
-- Prose: no em dashes, and do not use the words "simply" or "easy".
+- Prose: follow the prose rules in [docs/deny-list.md](docs/deny-list.md), section 5.
 
 ### Notation
 
